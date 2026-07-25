@@ -1,0 +1,1049 @@
+<#
+    User Access Explorer - a desktop window over the UserAccessExplorer module.
+
+    Run:
+        pwsh -File .\Show-UserAccessExplorer.ps1
+    or right-click > Run with PowerShell 7.
+
+    WPF needs STA and PS7 is MTA by default, so the whole GUI runs in an STA
+    runspace. The scan runs in a background runspace so the window stays
+    responsive; rows appear live and progress is read from the scan's own
+    Write-Progress stream (site N of M).
+
+    Flow:
+      - Gear (top right) -> Client ID + Tenant admin URL -> Connect (once).
+      - Type a name or email in the User box; it searches as you type. Pick one.
+      - Choose scope (Whole tenant / One site), then Scan. Stop cancels.
+#>
+
+$moduleManifest = Join-Path (Split-Path $PSScriptRoot -Parent) 'UserAccessExplorer.psd1'
+
+$guiScript = {
+    param($ModulePath)
+
+    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+    Import-Module $ModulePath -Force
+    $script:ModulePath = $ModulePath
+
+    $script:ScanBlock = {
+        param($ModulePath, $User, $ClientId, $Url, $IsTenant)
+        Import-Module $ModulePath -Force
+        $common = @{ User = $User; ClientId = $ClientId; Interactive = $true }
+        if ($IsTenant) { Get-UserAccess @common -TenantWide -TenantAdminUrl $Url }
+        else           { Get-UserAccess @common -SiteUrl $Url }
+    }
+
+    # Enumerate the tenant's content sites so the One-site picker is a selection,
+    # not a URL to type. Same exclusions the module uses (redirect stubs, the
+    # OneDrive/MySite host). Runs in the background - a big tenant is slow.
+    $script:SiteEnumBlock = {
+        param($ModulePath, $ClientId, $Admin)
+        Import-Module $ModulePath -Force
+        Connect-PnPOnline -Url $Admin -ClientId $ClientId -Interactive
+        Get-PnPTenantSite | Where-Object {
+            $_.Template -notlike 'REDIRECT*' -and $_.Template -notlike 'SPSMSITEHOST*' -and $_.Url -notlike '*-my.sharepoint.com*'
+        } | ForEach-Object { [pscustomobject]@{ Title = "$($_.Title)"; Url = "$($_.Url)" } }
+    }
+
+    [xml]$xaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="User Access Explorer" Height="760" Width="820"
+        WindowStartupLocation="CenterScreen" MinWidth="720" MinHeight="600"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13"
+        Background="#EEF0F3">
+  <Window.Resources>
+    <SolidColorBrush x:Key="Accent"      Color="#0F6CBD"/>
+    <SolidColorBrush x:Key="AccentHover" Color="#115EA3"/>
+    <SolidColorBrush x:Key="AccentPress" Color="#0C3B5E"/>
+    <SolidColorBrush x:Key="Ink"         Color="#242424"/>
+    <SolidColorBrush x:Key="Subtle"      Color="#707882"/>
+    <SolidColorBrush x:Key="Line"        Color="#E6E8EB"/>
+    <SolidColorBrush x:Key="FieldBorder" Color="#C9CDD2"/>
+    <SolidColorBrush x:Key="Surface"     Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="TileBg"      Color="#F7F8FA"/>
+    <SolidColorBrush x:Key="RiskBg"      Color="#FCE7EA"/>
+    <SolidColorBrush x:Key="RiskFg"      Color="#B10E1C"/>
+
+    <Style x:Key="Glyph" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="Field" TargetType="TextBox">
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Padding" Value="10,0,10,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="BorderBrush" Value="{StaticResource FieldBorder}"/>
+      <Setter Property="Background" Value="{StaticResource Surface}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border CornerRadius="6" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="#F2F3F5"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="FieldCombo" TargetType="ComboBox">
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Padding" Value="8,0,4,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="BorderBrush" Value="{StaticResource FieldBorder}"/>
+      <Setter Property="Background" Value="{StaticResource Surface}"/>
+    </Style>
+
+    <Style x:Key="Primary" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Padding" Value="18,0,18,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource AccentHover}"/></Trigger>
+              <Trigger Property="IsPressed"  Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource AccentPress}"/></Trigger>
+              <Trigger Property="IsEnabled"  Value="False">
+                <Setter TargetName="b" Property="Background" Value="#E4E6E9"/>
+                <Setter Property="Foreground" Value="#A6ABB2"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Secondary" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Background" Value="{StaticResource Surface}"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Padding" Value="14,0,14,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6"
+                    BorderBrush="{StaticResource FieldBorder}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#F3F4F6"/></Trigger>
+              <Trigger Property="IsEnabled"  Value="False">
+                <Setter Property="Foreground" Value="#B0B4BA"/>
+                <Setter TargetName="b" Property="BorderBrush" Value="#EAEBEE"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- icon-only button (gear, overflow) -->
+    <Style x:Key="IconButton" TargetType="Button">
+      <Setter Property="Width" Value="34"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="b" Background="Transparent" CornerRadius="6">
+              <TextBlock Text="{TemplateBinding Content}" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                         Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#EDEFF2"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- pill toggle (Unexpected only) -->
+    <Style x:Key="PillToggle" TargetType="ToggleButton">
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Padding" Value="14,0,14,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="b" Background="{StaticResource Surface}" CornerRadius="6"
+                    BorderBrush="{StaticResource FieldBorder}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#F3F4F6"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="b" Property="Background" Value="{StaticResource RiskBg}"/>
+                <Setter TargetName="b" Property="BorderBrush" Value="#F1B9C0"/>
+                <Setter Property="Foreground" Value="{StaticResource RiskFg}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="TileLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style x:Key="TileValue" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="FontSize" Value="24"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,2,0,0"/>
+    </Style>
+  </Window.Resources>
+
+  <!-- one white card on a light canvas -->
+  <Border Margin="14" Background="{StaticResource Surface}" CornerRadius="10"
+          BorderBrush="{StaticResource Line}" BorderThickness="1">
+    <Grid Margin="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>  <!-- header -->
+        <RowDefinition Height="Auto"/>  <!-- controls -->
+        <RowDefinition Height="Auto"/>  <!-- tiles -->
+        <RowDefinition Height="Auto"/>  <!-- toolbar -->
+        <RowDefinition Height="Auto"/>  <!-- list header -->
+        <RowDefinition Height="*"/>     <!-- list -->
+        <RowDefinition Height="Auto"/>  <!-- footer -->
+      </Grid.RowDefinitions>
+
+      <!-- HEADER -->
+      <Grid Grid.Row="0" Margin="20,16,14,14">
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="User access explorer" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+          <TextBlock Text="What a user can reach, and how they got there" FontSize="12.5" Foreground="{StaticResource Subtle}" Margin="0,1,0,0"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+          <Border x:Name="TenantChip" CornerRadius="12" Background="#EDEFF2" Padding="10,4,12,4" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock x:Name="TenantChipIcon" Style="{StaticResource Glyph}" Text="&#xE711;" FontSize="12" Foreground="#8A9099" Margin="0,0,6,0"/>
+              <TextBlock x:Name="TenantChipText" Text="Not connected" FontSize="12" Foreground="#5B6b7B" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Border>
+          <Button x:Name="SettingsButton" Style="{StaticResource IconButton}" Content="&#xE713;" Margin="8,0,0,0" ToolTip="Connection settings"/>
+          <Button x:Name="OverflowButton" Style="{StaticResource IconButton}" Content="&#xE712;" ToolTip="More"/>
+        </StackPanel>
+      </Grid>
+
+      <Border Grid.Row="0" Height="1" Background="{StaticResource Line}" VerticalAlignment="Bottom"/>
+
+      <!-- CONTROLS -->
+      <Grid Grid.Row="1" Margin="20,16,20,4">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,0">
+          <TextBlock Text="User" Style="{StaticResource TileLabel}" Margin="0,0,0,4"/>
+          <Grid>
+            <ComboBox x:Name="UserCombo" Style="{StaticResource FieldCombo}" IsEnabled="False"
+                      IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" DisplayMemberPath="Display"/>
+            <TextBlock x:Name="UserPlaceholder" Text="Type a name or email to search" Margin="12,0,0,0"
+                       VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
+          </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,0">
+          <TextBlock Text="Scope" Style="{StaticResource TileLabel}" Margin="0,0,0,4"/>
+          <ComboBox x:Name="ScopeCombo" Style="{StaticResource FieldCombo}" Width="150">
+            <ComboBoxItem Content="Whole tenant" IsSelected="True"/>
+            <ComboBoxItem Content="One site"/>
+          </ComboBox>
+        </StackPanel>
+
+        <Button x:Name="ScanButton" Grid.Row="0" Grid.Column="2" Style="{StaticResource Primary}"
+                Content="Scan" Width="92" VerticalAlignment="Bottom" IsEnabled="False"/>
+
+        <!-- site row, only for One site: pick from the populated list or search -->
+        <Grid x:Name="SiteRow" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,10,0,0" Visibility="Collapsed">
+          <ComboBox x:Name="SiteCombo" Style="{StaticResource FieldCombo}"
+                    IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" DisplayMemberPath="Display"/>
+          <TextBlock x:Name="SitePlaceholder" Text="Select a site, or type to search" Margin="12,0,0,0"
+                     VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
+        </Grid>
+      </Grid>
+
+      <!-- STAT TILES -->
+      <UniformGrid Grid.Row="2" Rows="1" Columns="4" Margin="20,14,20,6">
+        <Border Background="{StaticResource TileBg}" CornerRadius="8" Margin="0,0,6,0" Padding="14,10,14,10">
+          <StackPanel Orientation="Horizontal">
+            <Border Width="38" Height="38" CornerRadius="8" Background="#E7F0FB" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE71B;" FontSize="17" Foreground="#0F6CBD" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel VerticalAlignment="Center"><TextBlock Text="Routes found" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileRoutes" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
+          </StackPanel>
+        </Border>
+        <Border x:Name="TileUnexpectedCard" Background="{StaticResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
+          <StackPanel Orientation="Horizontal">
+            <Border Width="38" Height="38" CornerRadius="8" Background="#FBE3E6" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE7BA;" FontSize="17" Foreground="#B10E1C" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel VerticalAlignment="Center"><TextBlock Text="Unexpected" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileUnexpected" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
+          </StackPanel>
+        </Border>
+        <Border Background="{StaticResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
+          <StackPanel Orientation="Horizontal">
+            <Border Width="38" Height="38" CornerRadius="8" Background="#E7F3EC" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE73E;" FontSize="17" Foreground="#107C41" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel VerticalAlignment="Center"><TextBlock Text="Sites reached" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileSites" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
+          </StackPanel>
+        </Border>
+        <Border Background="{StaticResource TileBg}" CornerRadius="8" Margin="6,0,0,0" Padding="14,10,14,10">
+          <StackPanel Orientation="Horizontal">
+            <Border Width="38" Height="38" CornerRadius="8" Background="#EFE9F5" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE72E;" FontSize="17" Foreground="#5C2E91" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel VerticalAlignment="Center"><TextBlock Text="Highest access" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileAccess" Text="-" Style="{StaticResource TileValue}"/></StackPanel>
+          </StackPanel>
+        </Border>
+      </UniformGrid>
+
+      <!-- TOOLBAR -->
+      <Grid Grid.Row="3" Margin="20,8,20,10">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Grid Grid.Column="0" Margin="0,0,10,0">
+          <TextBox x:Name="FilterBox" Style="{StaticResource Field}"/>
+          <TextBlock x:Name="FilterPlaceholder" Text="Filter sites or groups" Margin="12,0,0,0"
+                     VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
+        </Grid>
+        <Button x:Name="ExportButton" Grid.Column="1" Style="{StaticResource Secondary}" IsEnabled="False">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Style="{StaticResource Glyph}" Text="&#xE896;" FontSize="14" Margin="0,0,6,0"/>
+            <TextBlock Text="Export" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+      </Grid>
+
+      <!-- (column headers are now provided by the DataGrid itself) -->
+      <Border Grid.Row="4" Height="1" Background="{StaticResource Line}" Margin="20,4,20,0"/>
+
+      <!-- RESULTS GRID: one row per route, sortable/filterable/groupable columns -->
+      <Grid Grid.Row="5" Margin="20,0,20,0">
+        <DataGrid x:Name="ResultsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0"
+                  Background="Transparent" RowBackground="White" CanUserAddRows="False"
+                  CanUserResizeRows="False" RowHeaderWidth="0" SelectionMode="Single"
+                  CanUserSortColumns="False"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  EnableRowVirtualization="True" FontSize="13" Foreground="{StaticResource Ink}">
+          <DataGrid.GroupStyle>
+            <GroupStyle>
+              <GroupStyle.ContainerStyle>
+                <Style TargetType="{x:Type GroupItem}">
+                  <Setter Property="Template">
+                    <Setter.Value>
+                      <ControlTemplate TargetType="{x:Type GroupItem}">
+                        <Expander IsExpanded="True" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
+                          <Expander.Header>
+                            <StackPanel Orientation="Horizontal">
+                              <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <Ellipse.Style>
+                                  <Style TargetType="Ellipse">
+                                    <Setter Property="Fill" Value="#C4C9D0"/>
+                                    <Style.Triggers>
+                                      <DataTrigger Binding="{Binding Name}" Value="Unexpected"><Setter Property="Fill" Value="#B10E1C"/></DataTrigger>
+                                      <DataTrigger Binding="{Binding Name}" Value="Expected"><Setter Property="Fill" Value="#107C41"/></DataTrigger>
+                                    </Style.Triggers>
+                                  </Style>
+                                </Ellipse.Style>
+                              </Ellipse>
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                              <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{StaticResource Subtle}"/>
+                            </StackPanel>
+                          </Expander.Header>
+                          <ItemsPresenter/>
+                        </Expander>
+                      </ControlTemplate>
+                    </Setter.Value>
+                  </Setter>
+                </Style>
+              </GroupStyle.ContainerStyle>
+            </GroupStyle>
+          </DataGrid.GroupStyle>
+          <DataGrid.ColumnHeaderStyle>
+            <Style TargetType="DataGridColumnHeader">
+              <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+              <Setter Property="FontSize" Value="12"/>
+              <Setter Property="FontWeight" Value="SemiBold"/>
+              <Setter Property="Cursor" Value="Hand"/>
+              <Setter Property="Template">
+                <Setter.Value>
+                  <ControlTemplate TargetType="DataGridColumnHeader">
+                    <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Background="Transparent">
+                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,8,2,8">
+                        <ContentPresenter VerticalAlignment="Center"/>
+                        <!-- sort direction: a small triangle, distinct from the menu chevron -->
+                        <TextBlock x:Name="SortGlyph" Text="" FontSize="8" Foreground="{StaticResource Subtle}"
+                                   VerticalAlignment="Center" Margin="6,1,0,0"/>
+                        <!-- menu trigger, sits right next to the label like SharePoint -->
+                        <Button x:Name="HdrChevron" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                Padding="2,0,2,0" Margin="4,0,0,0" ToolTip="Sort, group and filter">
+                          <TextBlock Style="{StaticResource Glyph}" Text="&#xE70D;" FontSize="10" Foreground="{StaticResource Subtle}"/>
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="SortDirection" Value="Ascending">
+                        <Setter TargetName="SortGlyph" Property="Text" Value="&#x25B2;"/>
+                      </Trigger>
+                      <Trigger Property="SortDirection" Value="Descending">
+                        <Setter TargetName="SortGlyph" Property="Text" Value="&#x25BC;"/>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </Setter.Value>
+              </Setter>
+            </Style>
+          </DataGrid.ColumnHeaderStyle>
+          <DataGrid.CellStyle>
+            <Style TargetType="DataGridCell">
+              <Setter Property="BorderThickness" Value="0"/>
+              <Setter Property="Padding" Value="4,10,4,10"/>
+              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+              <Setter Property="Background" Value="Transparent"/>
+              <Setter Property="Template">
+                <Setter.Value>
+                  <ControlTemplate TargetType="DataGridCell">
+                    <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                      <ContentPresenter VerticalAlignment="Top"/>
+                    </Border>
+                  </ControlTemplate>
+                </Setter.Value>
+              </Setter>
+              <Style.Triggers>
+                <!-- keep text visible on selection (default turns it white) -->
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter Property="Background" Value="#E9F1FB"/>
+                  <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                </Trigger>
+              </Style.Triggers>
+            </Style>
+          </DataGrid.CellStyle>
+          <DataGrid.RowStyle>
+            <Style TargetType="DataGridRow">
+              <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+              <Setter Property="BorderThickness" Value="0,0,0,1"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsUnexpected}" Value="True">
+                  <Setter Property="Background" Value="#FDF3F2"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </DataGrid.RowStyle>
+          <DataGrid.Columns>
+            <DataGridTemplateColumn Header="Risk" Width="120" SortMemberPath="RiskText">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <Border Background="{Binding RiskBg}" CornerRadius="10" Padding="9,3,9,3"
+                          HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <TextBlock Text="{Binding RiskText}" Foreground="{Binding RiskFg}" FontSize="11.5" FontWeight="SemiBold"/>
+                  </Border>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn Header="Site" Width="230" SortMemberPath="SiteTitle">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal" ToolTip="{Binding SiteUrl}">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE774;" FontSize="14" Foreground="#0F6CBD" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding SiteTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTextColumn Header="Grant path" Binding="{Binding GrantPath}" Width="*" MinWidth="240" SortMemberPath="GrantPath">
+              <DataGridTextColumn.ElementStyle>
+                <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
+              </DataGridTextColumn.ElementStyle>
+            </DataGridTextColumn>
+            <DataGridTextColumn Header="Effective" Binding="{Binding Effective}" Width="120" SortMemberPath="Effective"/>
+          </DataGrid.Columns>
+        </DataGrid>
+        <TextBlock x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="#9AA0A6" FontSize="14" TextAlignment="Center" MaxWidth="440" TextWrapping="Wrap"
+                   Text="Connect, pick a user, and run a scan to see what they can reach - and how."/>
+      </Grid>
+
+      <!-- FOOTER -->
+      <Border Grid.Row="6" Background="#F7F8FA" CornerRadius="0,0,10,10" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,10,14,10">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <ProgressBar x:Name="Progress" Grid.Column="0" Width="150" Height="6" Minimum="0" Maximum="100"
+                       Visibility="Collapsed" VerticalAlignment="Center" Foreground="{StaticResource Accent}" Background="#E3E6EA" BorderThickness="0"/>
+          <TextBlock x:Name="StatusText" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
+                     Foreground="{StaticResource Subtle}" Text="Open settings to connect."/>
+          <Button x:Name="StopButton" Grid.Column="2" Style="{StaticResource Secondary}" Content="Stop" Width="80" Visibility="Collapsed"/>
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+
+  <!-- settings popup (connection) -->
+</Window>
+'@
+
+    $reader = New-Object System.Xml.XmlNodeReader $xaml
+    $window = [Windows.Markup.XamlReader]::Load($reader)
+
+    $get = { param($n) $window.FindName($n) }
+    $userCombo   = & $get 'UserCombo';    $userPlace = & $get 'UserPlaceholder'
+    $scopeCombo  = & $get 'ScopeCombo';   $scanBtn   = & $get 'ScanButton'
+    $siteRow     = & $get 'SiteRow';      $siteCombo = & $get 'SiteCombo';  $sitePlace = & $get 'SitePlaceholder'
+    $tenantChip  = & $get 'TenantChip';   $chipText  = & $get 'TenantChipText'; $chipIcon = & $get 'TenantChipIcon'
+    $settingsBtn = & $get 'SettingsButton'; $overflowBtn = & $get 'OverflowButton'
+    $tileRoutes  = & $get 'TileRoutes';   $tileUnexp = & $get 'TileUnexpected'; $tileUnexpCard = & $get 'TileUnexpectedCard'
+    $tileSites   = & $get 'TileSites';    $tileAccess = & $get 'TileAccess'
+    $filterBox   = & $get 'FilterBox';    $filterPlace = & $get 'FilterPlaceholder'
+    $exportBtn = & $get 'ExportButton'
+    $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
+    $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
+
+    # brushes reused across view models
+    $brInk   = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0x24,0x24,0x24))
+    $brRed   = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0xB1,0x0E,0x1C))
+    $brGreen = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0x10,0x7C,0x41))
+    $brSubtle= New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0x70,0x78,0x82))
+    $riskBgU = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0xFC,0xE7,0xEA))
+    $riskFgU = $brRed
+    $riskBgE = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(0xEA,0xF1,0xE7))
+    $riskFgE = $brGreen
+    foreach ($b in $brInk,$brRed,$brGreen,$brSubtle,$riskBgU,$riskBgE) { $b.Freeze() }
+
+    $cleanVia = {
+        param($grantedVia)
+        if ($grantedVia -match "^Everyone claim \((.+)\)$") { return $matches[1] }
+        if ($grantedVia -match "^SharePoint group '(.+)'$") { return $matches[1] }
+        if ($grantedVia -match "^Entra group '(.+?)'")      { return $matches[1] }
+        return $grantedVia
+    }
+    $accessRank = { param($a) switch ($a) { 'Full Control' {3} 'Edit' {2} 'Read' {1} default {0} } }
+
+    # --- turn flat routes into site-grouped view models ----------------------
+    $script:allGroups = @()
+    # One display row per route. Grant path is its own column (via -> permission),
+    # so the "how" is always visible and every route is independently
+    # sortable / filterable / groupable in the grid.
+    $buildRows = {
+        param($rows)
+        $out = foreach ($r in $rows) {
+            $via     = & $cleanVia $r.GrantedVia
+            $isUnexp = $r.RouteType -eq 'Unexpected'
+            $isRoot  = "$($r.SiteUrl)" -notmatch '/(sites|teams)/'
+            $site    = if ($isRoot) { "$($r.SiteTitle) (root)" } else { "$($r.SiteTitle)" }
+            [pscustomobject]@{
+                RiskText     = $r.RouteType
+                RiskBg       = if ($isUnexp) { $riskBgU } else { $riskBgE }
+                RiskFg       = if ($isUnexp) { $riskFgU } else { $riskFgE }
+                IsUnexpected = $isUnexp
+                SiteTitle    = $site
+                SiteUrl      = $r.SiteUrl
+                GrantPath    = if ($r.Permission) { "$via -> $($r.Permission)" } else { "$via" }
+                Effective    = $r.EffectiveAccess
+                FilterKey    = "$($r.SiteTitle) $($r.SiteUrl) $via $($r.Permission) $($r.RouteType)".ToLower()
+            }
+        }
+        # unexpected first, then by site
+        @($out | Sort-Object @{ e = { if ($_.IsUnexpected) { 0 } else { 1 } } }, SiteTitle)
+    }
+
+    # sort / group / per-column filter state, driven by the header menus.
+    # colFilters: field -> the single allowed value for that column (absent = all)
+    $script:sortField = $null; $script:sortDir = 'Ascending'; $script:groupField = $null
+    $script:colFilters = @{}
+
+    $applyView = {
+        $term = "$($filterBox.Text)".Trim().ToLower()
+        $view = foreach ($row in $script:allRows) {
+            if ($term -and $row.FilterKey -notlike "*$term*") { continue }
+            $keep = $true
+            foreach ($fld in $script:colFilters.Keys) {
+                if ("$($row.$fld)" -ne "$($script:colFilters[$fld])") { $keep = $false; break }
+            }
+            if (-not $keep) { continue }
+            $row
+        }
+        $view = [object[]]@($view)
+
+        # Pre-sort in PowerShell. ListCollectionView.SortDescriptions sorts via
+        # CLR reflection, which does NOT see a PSCustomObject's dynamic properties,
+        # so it silently no-ops. Sort-Object handles PSObjects correctly.
+        if ($script:sortField) {
+            $desc = ($script:sortDir -eq 'Descending')
+            $view = [object[]]@($view | Sort-Object -Property $script:sortField -Descending:$desc)
+        }
+
+        # A collection view so the grid can group by the chosen column. (Grouping
+        # DOES understand PSObjects because PropertyGroupDescription uses binding.)
+        $cv = New-Object System.Windows.Data.ListCollectionView (,$view)
+        if ($script:groupField) {
+            $cv.GroupDescriptions.Add((New-Object System.Windows.Data.PropertyGroupDescription $script:groupField))
+        }
+        $list.ItemsSource = $cv
+
+        # reflect the sort arrow on the matching column header
+        foreach ($c in $list.Columns) {
+            $c.SortDirection = if ($script:sortField -and "$($c.SortMemberPath)" -eq $script:sortField) {
+                if ($script:sortDir -eq 'Descending') { [System.ComponentModel.ListSortDirection]::Descending }
+                else { [System.ComponentModel.ListSortDirection]::Ascending }
+            } else { $null }
+        }
+
+        $empty = ($view.Count -eq 0 -and $script:allRows.Count -gt 0)
+        $emptyState.Visibility = if ($empty) { 'Visible' } else { 'Collapsed' }
+        if ($empty) { $emptyState.Text = 'No rows match the current filter.' }
+    }
+
+    # One shared, script-scope handler for every header menu item. The item's
+    # Tag carries { Field; Action }. NOT a closure: closures get their own scope
+    # module, so $script:* and $applyView would not resolve to this runspace.
+    $onMenuClick = {
+        $t = $this.Tag
+        switch ($t.Action) {
+            'SortAsc'     { $script:sortField = $t.Field; $script:sortDir = 'Ascending' }
+            'SortDesc'    { $script:sortField = $t.Field; $script:sortDir = 'Descending' }
+            'Group'       { $script:groupField = $t.Field }
+            'Ungroup'     { $script:groupField = $null }
+            'Filter'      { $script:colFilters[$t.Field] = $t.Value }
+            'ClearFilter' { [void]$script:colFilters.Remove($t.Field) }
+        }
+        & $applyView
+    }
+
+    # SharePoint-style header interaction:
+    #   click the LABEL   -> toggle sort ascending <-> descending
+    #   click the CHEVRON -> full menu (sort / group / filter)
+    $list.AddHandler(
+        [System.Windows.Controls.Primitives.ButtonBase]::ClickEvent,
+        [System.Windows.RoutedEventHandler]{
+            $e = $args[1]
+            $isChevron = $false; $chevron = $null; $node = $e.OriginalSource
+            while ($node) {
+                if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'HdrChevron') { $isChevron = $true; $chevron = $node }
+                if ($node -is [System.Windows.Controls.Primitives.DataGridColumnHeader]) { break }
+                $node = [System.Windows.Media.VisualTreeHelper]::GetParent($node)
+            }
+            if (-not ($node -is [System.Windows.Controls.Primitives.DataGridColumnHeader])) { return }
+            $col = $node.Column
+            $field = "$($col.SortMemberPath)"
+            if (-not $field) { return }
+
+            if (-not $isChevron) {
+                # clicked the header label: toggle sort, same as a SharePoint column
+                if ($script:sortField -eq $field) {
+                    $script:sortDir = if ($script:sortDir -eq 'Ascending') { 'Descending' } else { 'Ascending' }
+                } else {
+                    $script:sortField = $field; $script:sortDir = 'Ascending'
+                }
+                & $applyView
+                return
+            }
+
+            # clicked the chevron: open the menu
+            $menu = New-Object System.Windows.Controls.ContextMenu
+            $mk = {
+                param($text, $action)
+                $mi = New-Object System.Windows.Controls.MenuItem
+                $mi.Header = $text
+                $mi.Tag = [pscustomobject]@{ Field = $field; Action = $action }
+                $mi.Add_Click($onMenuClick)
+                [void]$menu.Items.Add($mi)
+            }
+            & $mk 'Sort A to Z' 'SortAsc'
+            & $mk 'Sort Z to A' 'SortDesc'
+            [void]$menu.Items.Add((New-Object System.Windows.Controls.Separator))
+            if ($script:groupField -eq $field) { & $mk 'Remove grouping' 'Ungroup' }
+            else { & $mk "Group by $($col.Header)" 'Group' }
+            [void]$menu.Items.Add((New-Object System.Windows.Controls.Separator))
+
+            # Filter by value: one checkable item per distinct value in this column.
+            $vals = @($script:allRows | ForEach-Object { "$($_.$field)" } | Sort-Object -Unique)
+            $active = "$($script:colFilters[$field])"
+            foreach ($v in $vals) {
+                $mi = New-Object System.Windows.Controls.MenuItem
+                $mi.Header = $v; $mi.IsCheckable = $true
+                $mi.IsChecked = ($active -eq $v)
+                $mi.Tag = [pscustomobject]@{ Field = $field; Action = 'Filter'; Value = $v }
+                $mi.Add_Click($onMenuClick)
+                [void]$menu.Items.Add($mi)
+            }
+            if ($script:colFilters.ContainsKey($field)) { & $mk 'Clear filter' 'ClearFilter' }
+
+            $menu.PlacementTarget = $chevron
+            $menu.Placement = 'Bottom'
+            $menu.IsOpen = $true
+        }
+    )
+
+    $refreshTiles = {
+        param($rows)
+        # [object[]] cast, not @(): in PS 7.6.3 @() around a List[object] throws
+        # "Argument types do not match". The cast handles both a List and @().
+        $rows = [object[]]$rows
+        $tileRoutes.Text = "$($rows.Count)"
+        $u = @($rows | Where-Object { $_.RouteType -eq 'Unexpected' }).Count
+        $tileUnexp.Text  = "$u"
+        $tileSites.Text  = "$(@($rows | Select-Object -ExpandProperty SiteUrl -Unique).Count)"
+        $highest = ($rows | Sort-Object @{ e = { & $accessRank $_.EffectiveAccess } } -Descending | Select-Object -First 1).EffectiveAccess
+        $tileAccess.Text = if ($highest) { $highest } else { '-' }
+        # tiles that should shout
+        if ($u -gt 0) { $tileUnexpCard.Background = $riskBgU; $tileUnexp.Foreground = $brRed }
+        else          { $tileUnexpCard.Background = (& $get 'TileUnexpectedCard').Background; $tileUnexp.Foreground = $brInk }
+        $tileAccess.Foreground = if ($highest -eq 'Full Control') { $brRed } elseif ($highest -eq 'Edit') { $brSubtle } else { $brInk }
+    }
+
+    # connection state (set on Connect; declared here so $loadSites can read it)
+    $script:clientId = ''; $script:adminUrl = ''
+
+    # Remember Client ID + admin URL between sessions. Neither is a secret (the
+    # client ID is a public app identifier, the URL is just a URL), so plain
+    # JSON under the roaming profile is fine.
+    $script:settingsPath = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'UserAccessExplorer\settings.json'
+    $loadSettings = {
+        try { if (Test-Path $script:settingsPath) { return Get-Content $script:settingsPath -Raw | ConvertFrom-Json } }
+        catch { Write-Verbose "settings load skipped: $($_.Exception.Message)" }
+        return $null
+    }
+    # Keep a short most-recent-first history of each, so admins juggling several
+    # tenants / app registrations pick from a dropdown instead of retyping.
+    $saveSettings = {
+        param($ClientId, $AdminUrl)
+        try {
+            $existing = & $loadSettings
+            $priorC = @(); $priorA = @()
+            if ($existing) {
+                $priorC = @(@($existing.ClientIds) + @($existing.ClientId))   # new arrays + old single value
+                $priorA = @(@($existing.AdminUrls) + @($existing.AdminUrl))
+            }
+            $clients = @(@($ClientId) + @($priorC | Where-Object { $_ -and $_ -ne $ClientId }) | Where-Object { $_ } | Select-Object -First 10)
+            $admins  = @(@($AdminUrl)  + @($priorA | Where-Object { $_ -and $_ -ne $AdminUrl })  | Where-Object { $_ } | Select-Object -First 10)
+            $dir = Split-Path $script:settingsPath -Parent
+            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+            [pscustomobject]@{ ClientIds = $clients; AdminUrls = $admins } |
+                ConvertTo-Json | Set-Content -Path $script:settingsPath -Encoding UTF8
+        } catch { Write-Verbose "settings save skipped: $($_.Exception.Message)" }
+    }
+
+    # Populate the One-site picker once, in the background, so choosing a site is
+    # a selection rather than a URL to type. Kicked off on connect and again if
+    # the user switches to One site before it has loaded.
+    $script:siteLoaded = $false
+    $loadSites = {
+        if ($script:siteLoaded -or -not $script:clientId) { return }
+        $status.Text = 'Loading site list...'
+        $script:siteRs = [runspacefactory]::CreateRunspace(); $script:siteRs.Open()
+        $script:sitePs = [powershell]::Create(); $script:sitePs.Runspace = $script:siteRs
+        [void]$script:sitePs.AddScript($script:SiteEnumBlock).
+            AddArgument($script:ModulePath).AddArgument($script:clientId).AddArgument($script:adminUrl)
+        $script:siteOut = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
+        $sinbuf = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
+        $script:siteHandle = $script:sitePs.BeginInvoke($sinbuf, $script:siteOut)
+
+        $script:siteTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:siteTimer.Interval = [TimeSpan]::FromMilliseconds(400)
+        $script:siteTimer.Add_Tick({
+            if (-not $script:siteHandle.IsCompleted) { return }
+            $script:siteTimer.Stop()
+            $err = $null
+            try { $null = $script:sitePs.EndInvoke($script:siteHandle) } catch { $err = $_.Exception.Message }
+            $sites = @($script:siteOut | ForEach-Object { [pscustomobject]@{ Display = "$($_.Title) - $($_.Url)"; Url = "$($_.Url)" } } | Sort-Object Display)
+            $script:sitePs.Dispose(); $script:siteRs.Dispose()
+            if ($sites.Count -gt 0) {
+                $siteCombo.ItemsSource = $sites
+                $script:siteLoaded = $true
+                if ("$($status.Text)" -like 'Loading site list*') { $status.Text = "$($sites.Count) site(s) available - pick one or search." }
+            } elseif ($err) { $status.Text = "Could not load sites: $err" }
+        })
+        $script:siteTimer.Start()
+    }
+
+    # placeholders
+    $ph = {
+        param($box, $place) $place.Visibility = if ("$($box.Text)".Length -eq 0) { 'Visible' } else { 'Collapsed' }
+    }
+    $userCombo.Add_SelectionChanged({ & $ph $userCombo $userPlace })
+    $userCombo.Add_LostKeyboardFocus({ & $ph $userCombo $userPlace })
+    $siteCombo.Add_SelectionChanged({ & $ph $siteCombo $sitePlace })
+    $siteCombo.Add_KeyUp({ & $ph $siteCombo $sitePlace })
+    $siteCombo.Add_LostKeyboardFocus({ & $ph $siteCombo $sitePlace })
+    $filterBox.Add_TextChanged({ & $ph $filterBox $filterPlace; & $applyView })
+
+    # scope combo shows/hides the site row and kicks off the site list
+    $scopeCombo.Add_SelectionChanged({
+        if ($scopeCombo.SelectedIndex -eq 1) { $siteRow.Visibility = 'Visible'; & $loadSites; $siteCombo.Focus() }
+        else { $siteRow.Visibility = 'Collapsed' }
+    })
+
+    # --- settings popup (built in code so the connect flow lives here) --------
+    $popup = New-Object System.Windows.Controls.Primitives.Popup
+    $popup.PlacementTarget = $settingsBtn
+    $popup.Placement = 'Bottom'; $popup.StaysOpen = $false; $popup.AllowsTransparency = $true
+    $panelXaml = @'
+<Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="White" CornerRadius="8" BorderBrush="#D0D4D9" BorderThickness="1" Width="360" Margin="8">
+  <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2"/></Border.Effect>
+  <StackPanel Margin="16">
+    <TextBlock Text="Connect to your tenant" FontWeight="SemiBold" FontSize="14" Foreground="#242424" Margin="0,0,0,10"/>
+    <TextBlock Text="Client ID" FontSize="12" Foreground="#707882" Margin="0,0,0,3"/>
+    <ComboBox x:Name="PClient" Height="34" IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" VerticalContentAlignment="Center"/>
+    <TextBlock Text="Tenant admin URL" FontSize="12" Foreground="#707882" Margin="0,10,0,3"/>
+    <ComboBox x:Name="PAdmin" Height="34" IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" VerticalContentAlignment="Center"/>
+    <Button x:Name="PConnect" Content="Connect" Height="34" Margin="0,14,0,0" Background="#0F6CBD" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+    <TextBlock x:Name="PStatus" FontSize="11.5" Foreground="#707882" Margin="0,8,0,0" TextWrapping="Wrap"/>
+    <TextBlock Margin="0,10,0,0" FontSize="11.5" TextWrapping="Wrap">
+      <Hyperlink x:Name="PRegister" Foreground="#0F6CBD">No app yet? Register one for this tenant</Hyperlink>
+    </TextBlock>
+  </StackPanel>
+</Border>
+'@
+    $preader = New-Object System.Xml.XmlNodeReader ([xml]$panelXaml)
+    $panel = [Windows.Markup.XamlReader]::Load($preader)
+    $popup.Child = $panel
+    $pClient = $panel.FindName('PClient'); $pAdmin = $panel.FindName('PAdmin')
+    $pConnect = $panel.FindName('PConnect'); $pStatus = $panel.FindName('PStatus')
+    $pRegister = $panel.FindName('PRegister')
+
+    # fill the dropdowns with the remembered history; pre-select the most recent
+    $saved = & $loadSettings
+    if ($saved) {
+        $clientHist = @(@($saved.ClientIds) + @($saved.ClientId) | Where-Object { $_ })
+        $adminHist  = @(@($saved.AdminUrls) + @($saved.AdminUrl)  | Where-Object { $_ })
+        if ($clientHist.Count) { $pClient.ItemsSource = $clientHist; $pClient.SelectedIndex = 0 }
+        if ($adminHist.Count)  { $pAdmin.ItemsSource  = $adminHist;  $pAdmin.SelectedIndex = 0 }
+    }
+
+    $settingsBtn.Add_Click({ $popup.IsOpen = -not $popup.IsOpen })
+    $overflowBtn.Add_Click({ $status.Text = 'User Access Explorer - a Copilot-readiness oversharing review tool.' })
+
+    $pConnect.Add_Click({
+        $c = "$($pClient.Text)".Trim(); $a = "$($pAdmin.Text)".Trim()
+        if (-not $c -or -not $a) { $pStatus.Text = 'Enter both Client ID and Tenant admin URL.'; return }
+        $pStatus.Text = 'Connecting... a sign-in window will appear.'
+        try {
+            Connect-PnPOnline -Url $a -ClientId $c -Interactive
+            $script:clientId = $c; $script:adminUrl = $a
+            & $saveSettings $c $a
+            $tenant = if ($a -match 'https://([^.\-]+)') { $matches[1] } else { 'tenant' }
+            $chipText.Text = $tenant; $chipText.Foreground = $brGreen
+            $chipIcon.Text = [char]0xE73E; $chipIcon.Foreground = $brGreen
+            $tenantChip.Background = $riskBgE
+            $userCombo.IsEnabled = $true; $scanBtn.IsEnabled = $true
+            & $loadSites
+            $status.Text = 'Connected. Type a name or email in the User box, then Scan.'
+            $pStatus.Text = "Connected to $tenant."
+            $popup.IsOpen = $false
+        } catch { $pStatus.Text = "Connect failed: $($_.Exception.Message)" }
+    })
+
+    # First-run helper: create an Entra app for this tenant and fill in the ID.
+    # PnP has a cmdlet for exactly this, so users do not have to click through
+    # the Entra portal. Runs interactively (browser consent), like Connect.
+    $pRegister.Add_Click({
+        $a = "$($pAdmin.Text)".Trim()
+        $tenantName = if ($a -match 'https://([^.\-]+)') { $matches[1] } else { $null }
+        if (-not $tenantName) { $pStatus.Text = 'Enter the Tenant admin URL first - it tells me your tenant.'; return }
+        $tenant = "$tenantName.onmicrosoft.com"
+        $pStatus.Text = "Registering an app in $tenant... sign in and consent when prompted."
+        try {
+            $app = Register-PnPEntraIDAppForInteractiveLogin -ApplicationName 'User Access Explorer' -Tenant $tenant -Interactive
+            $cid = $null
+            foreach ($p in 'AzureAppId','ClientId','AppId','Id') {
+                if ($app -and ($app.PSObject.Properties.Name -contains $p) -and $app.$p) { $cid = "$($app.$p)"; break }
+            }
+            if (-not $cid) {
+                $m = [regex]::Match("$app", '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+                if ($m.Success) { $cid = $m.Value }
+            }
+            if ($cid) { $pClient.Text = $cid; $pStatus.Text = 'App registered. Client ID filled in - now click Connect.' }
+            else { $pStatus.Text = 'App registered, but I could not read the Client ID - check the Entra portal.' }
+        } catch { $pStatus.Text = "Register failed: $($_.Exception.Message)" }
+    })
+
+    # --- user search-as-you-type (debounced) ---------------------------------
+    $script:searchTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:searchTimer.Interval = [TimeSpan]::FromMilliseconds(450)
+    $script:searchTimer.Add_Tick({
+        $script:searchTimer.Stop()
+        $term = "$($userCombo.Text)".Trim()
+        if ($term.Length -lt 2) { return }
+        if ($userCombo.SelectedItem -and $userCombo.SelectedItem.Display -eq $term) { return }
+        try {
+            $cap = 25; $esc = $term.Replace("'", "''")
+            $byName = (Invoke-PnPGraphMethod -Url "users?`$filter=startswith(displayName,'$esc')&`$select=displayName,userPrincipalName&`$top=$cap" -Method Get).value
+            $byUpn  = (Invoke-PnPGraphMethod -Url "users?`$filter=startswith(userPrincipalName,'$esc')&`$select=displayName,userPrincipalName&`$top=$cap" -Method Get).value
+            $seen = @{}
+            $items = foreach ($u in @($byName) + @($byUpn)) {
+                if (-not $u -or $seen.ContainsKey($u.userPrincipalName)) { continue }
+                $seen[$u.userPrincipalName] = $true
+                [pscustomobject]@{ Display = "$($u.displayName) - $($u.userPrincipalName)"; Upn = $u.userPrincipalName }
+            }
+            $items = @($items | Sort-Object Display)
+            $userCombo.ItemsSource = $items
+            $userCombo.IsDropDownOpen = ($items.Count -gt 0)
+            $status.Text = if ($items.Count) { "$($items.Count) match(es). Pick one, then Scan." } else { "No users start with '$term'." }
+        } catch { $status.Text = "Search failed: $($_.Exception.Message)" }
+    })
+    $userCombo.Add_KeyUp({
+        & $ph $userCombo $userPlace
+        if ("$($args[1].Key)" -in 'Down','Up','Enter','Tab','Escape','Left','Right') { return }
+        $script:searchTimer.Stop(); $script:searchTimer.Start()
+    })
+
+    # --- export --------------------------------------------------------------
+    $exportBtn.Add_Click({
+        $flat = if ($script:rows) { $script:rows.ToArray() } else { @() }
+        if (-not $flat -or $flat.Count -eq 0) { $status.Text = 'Nothing to export - run a scan first.'; return }
+        $dlg = New-Object Microsoft.Win32.SaveFileDialog
+        $dlg.Filter = 'HTML report (*.html)|*.html|CSV (*.csv)|*.csv'; $dlg.FileName = 'access-report.html'
+        if ($dlg.ShowDialog()) {
+            try {
+                if ($dlg.FileName -match '\.csv$') { $flat | Export-UserAccessReport -Path $dlg.FileName | Out-Null }
+                else { $flat | Export-UserAccessReport -Path $dlg.FileName -Html | Out-Null }
+                $status.Text = "Report saved to $($dlg.FileName)"
+            } catch { $status.Text = "Export failed: $($_.Exception.Message)" }
+        }
+    })
+
+    # --- scan ----------------------------------------------------------------
+    $script:rows = $null; $script:bgPs = $null; $script:bgRs = $null
+    $script:handle = $null; $script:output = $null; $script:seen = 0; $script:timer = $null; $script:cancelled = $false
+
+    $stopBtn.Add_Click({
+        if ($script:bgPs) { $script:cancelled = $true; try { $script:bgPs.Stop() } catch { Write-Verbose "$_" } ; $status.Text = 'Stopping...' }
+    })
+
+    $scanBtn.Add_Click({
+        $selected = $userCombo.SelectedItem
+        $user = if ($selected) { $selected.Upn }
+                elseif ("$($userCombo.Text)" -match '@') { "$($userCombo.Text)".Trim() }
+                else { $null }
+        if (-not $user) { $status.Text = 'Pick a user from the search list first.'; return }
+
+        $isTenant = ($scopeCombo.SelectedIndex -eq 0)
+        $siteSel = $siteCombo.SelectedItem
+        $target = if ($isTenant) { $script:adminUrl }
+                  elseif ($siteSel) { "$($siteSel.Url)" }
+                  else { "$($siteCombo.Text)".Trim() }
+        if (-not $target) { $status.Text = if ($isTenant) { 'Connect first (settings).' } else { 'Pick a site.' }; return }
+
+        $script:rows = New-Object System.Collections.Generic.List[object]
+        $script:allRows = @(); $list.ItemsSource = [object[]]@()
+        $script:seen = 0; $script:cancelled = $false
+        & $refreshTiles @()
+        $emptyState.Visibility = 'Collapsed'
+        $scanBtn.IsEnabled = $false; $exportBtn.IsEnabled = $false
+        $progress.Visibility = 'Visible'; $progress.IsIndeterminate = -not $isTenant; $progress.Value = 0
+        $stopBtn.Visibility = 'Visible'
+        $status.Text = "Scanning $user..."
+
+        $script:bgRs = [runspacefactory]::CreateRunspace(); $script:bgRs.Open()
+        $script:bgPs = [powershell]::Create(); $script:bgPs.Runspace = $script:bgRs
+        [void]$script:bgPs.AddScript($script:ScanBlock).
+            AddArgument($script:ModulePath).AddArgument($user).AddArgument($script:clientId).
+            AddArgument($target).AddArgument($isTenant)
+
+        $script:output = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
+        $inbuf = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
+        $script:handle = $script:bgPs.BeginInvoke($inbuf, $script:output)
+
+        $script:timer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:timer.Interval = [TimeSpan]::FromMilliseconds(400)
+        $script:timer.Add_Tick({
+            $new = $false
+            while ($script:output.Count -gt $script:seen) { $script:rows.Add($script:output[$script:seen]); $script:seen++; $new = $true }
+
+            # determinate progress read straight from the scan's Write-Progress
+            $pr = $script:bgPs.Streams.Progress
+            if ($pr.Count -gt 0) {
+                $last = $pr[$pr.Count - 1]
+                if ($last.PercentComplete -ge 0) { $progress.Value = $last.PercentComplete }
+                if ("$($last.StatusDescription)" -match '^(\d+) of (\d+)') { $status.Text = "Scanning site $($matches[1]) of $($matches[2])" }
+            }
+
+            if ($new) {
+                $script:allRows = & $buildRows $script:rows
+                & $refreshTiles $script:rows
+                & $applyView
+            }
+
+            if ($script:handle.IsCompleted) {
+                $script:timer.Stop()
+                $failMsg = $null
+                try { $null = $script:bgPs.EndInvoke($script:handle) } catch { if (-not $script:cancelled) { $failMsg = $_.Exception.Message } }
+                foreach ($errRec in $script:bgPs.Streams.Error) { if (-not $script:cancelled) { $failMsg = "$errRec" } }
+                $skipped = @($script:bgPs.Streams.Warning | Where-Object { "$_" -match '^Skipped ' }).Count
+                $script:bgPs.Dispose(); $script:bgRs.Dispose()
+
+                $script:allRows = & $buildRows $script:rows
+                & $refreshTiles $script:rows
+                & $applyView
+                $progress.Visibility = 'Collapsed'; $stopBtn.Visibility = 'Collapsed'
+                $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
+
+                $u = @($script:rows | Where-Object { $_.RouteType -eq 'Unexpected' }).Count
+                $skipNote = if ($skipped) { " ($skipped site(s) skipped)" } else { "" }
+                if ($script:cancelled) { $status.Text = "Stopped. $($script:rows.Count) route(s) collected, $u unexpected." }
+                elseif ($failMsg -and $script:rows.Count -eq 0) {
+                    $emptyState.Text = "Scan failed: $failMsg"; $emptyState.Visibility = 'Visible'; $status.Text = "Failed: $failMsg"
+                }
+                elseif ($script:rows.Count -eq 0) {
+                    $emptyState.Text = 'No access found - this user cannot reach the scanned scope.'; $emptyState.Visibility = 'Visible'
+                    $status.Text = 'Done: no access found.'
+                }
+                else { $status.Text = "Done: $($script:rows.Count) route(s), $u unexpected$skipNote." }
+            }
+        })
+        $script:timer.Start()
+    })
+
+    # open settings on launch so the first thing a user sees is how to connect
+    $window.Add_Loaded({ $popup.IsOpen = $true })
+    $null = $window.ShowDialog()
+}
+
+if ([System.Threading.Thread]::CurrentThread.GetApartmentState() -eq 'STA') {
+    & $guiScript $moduleManifest
+}
+else {
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.ApartmentState = 'STA'; $rs.ThreadOptions = 'ReuseThread'; $rs.Open()
+    $ps = [powershell]::Create(); $ps.Runspace = $rs
+    [void]$ps.AddScript($guiScript).AddArgument($moduleManifest)
+    $ps.Invoke()
+    foreach ($e in $ps.Streams.Error) { Write-Warning "GUI error: $e" }
+    $ps.Dispose(); $rs.Close(); $rs.Dispose()
+}

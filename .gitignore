@@ -1,0 +1,10 @@
+# dev/ holds integration harnesses that hardcode a real tenant + client id and
+# need a live SharePoint. Not part of the shipped module - unit tests live in
+# tests/ and need no tenant.
+dev/
+
+*.pfx
+*.cer
+*.credentials.json
+*.log
+.vs/
