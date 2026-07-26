@@ -168,6 +168,8 @@ Results are **grouped by site**, with the **Overshared** ones sorted to the top 
 
 The scan runs on a background runspace so the window stays responsive on tenant-wide sweeps.
 
+**Saved scans.** Every completed scan is saved automatically (to `%AppData%\UserAccessExplorer\scans`). The **⋯ menu** (top right) lists your recent scans — click one to **reload it instantly**, no SharePoint round-trip. Reloaded results are clearly stamped with when they were taken, and **Scan always re-runs live**, so a cached view is never mistaken for current permissions.
+
 > **Notes**
 > - WPF requires STA and PowerShell 7 is MTA by default, so the GUI runs itself inside a manually-created STA runspace. The engine is PS7-only, so it cannot fall back to Windows PowerShell 5.1.
 > - The GUI does **deep** scanning too — pick *One site (deep)* to walk subsites, lists, folders, items and sharing links, and use the **Tree view** to see the structure.

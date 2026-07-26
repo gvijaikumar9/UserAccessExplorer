@@ -1128,6 +1128,79 @@ $guiScript = {
         } catch { Write-Verbose "settings save skipped: $($_.Exception.Message)" }
     }
 
+    # --- saved / recent scans ------------------------------------------------
+    # Each completed scan is written to JSON under the roaming profile, keyed by
+    # (user, mode, target) so re-scanning the same thing overwrites in place. The
+    # Recent menu (overflow button) reloads any of them INSTANTLY - no SharePoint
+    # round-trip - clearly stamped with when it was taken. Scan itself always runs
+    # live, so a cached view is never mistaken for current permissions.
+    $script:scansDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'UserAccessExplorer\scans'
+    $scanFileFor = {
+        param($key)
+        if (-not (Test-Path $script:scansDir)) { New-Item -ItemType Directory -Path $script:scansDir -Force | Out-Null }
+        $md5  = [System.Security.Cryptography.MD5]::Create()
+        $hash = ([System.BitConverter]::ToString($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes("$key")))) -replace '-'
+        Join-Path $script:scansDir "$hash.json"
+    }
+    $pruneScans = {
+        try {
+            $files = @(Get-ChildItem $script:scansDir -Filter *.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+            if ($files.Count -gt 25) { $files | Select-Object -Skip 25 | Remove-Item -Force -ErrorAction SilentlyContinue }
+        } catch { Write-Verbose "prune scans skipped: $($_.Exception.Message)" }
+    }
+    $saveScan = {
+        param($User, $UserDisplay, $Mode, $ScopeLabel, $Target, $Rows)
+        try {
+            $arr = @($Rows)
+            [pscustomobject]@{
+                User = "$User"; UserDisplay = "$UserDisplay"; Mode = "$Mode"; ScopeLabel = "$ScopeLabel"; Target = "$Target"
+                Timestamp = (Get-Date).ToString('o')
+                RouteCount = $arr.Count
+                OversharedCount = @($arr | Where-Object { $_.RouteType -eq 'Overshared' }).Count
+                Rows = $arr
+            } | ConvertTo-Json -Depth 6 | Set-Content -Path (& $scanFileFor "$User|$Mode|$Target") -Encoding UTF8
+            & $pruneScans
+        } catch { Write-Verbose "save scan skipped: $($_.Exception.Message)" }
+    }
+    $listScans = {
+        if (-not (Test-Path $script:scansDir)) { return @() }
+        @(Get-ChildItem $script:scansDir -Filter *.json -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | ForEach-Object {
+                try { Get-Content $_.FullName -Raw | ConvertFrom-Json } catch { Write-Verbose "skipped unreadable scan file: $($_.Exception.Message)" }
+            })
+    }
+    $loadScan = {
+        param($Scan)
+        $script:rows = New-Object System.Collections.Generic.List[object]
+        foreach ($r in @($Scan.Rows)) { $script:rows.Add($r) }
+        $script:lastMode = "$($Scan.Mode)"
+        if ($script:lastMode -eq 'Deep') {
+            $viewToggle.Visibility = 'Visible'; $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
+        } else {
+            $viewToggle.Visibility = 'Collapsed'; $colObject.Visibility = 'Collapsed'; $colLocation.Visibility = 'Collapsed'
+        }
+        $script:allRows = & $buildRows $script:rows
+        & $refreshTiles $script:rows
+        $viewToggle.IsChecked = ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0)
+        & $applyView
+        & $showView
+        $exportBtn.IsEnabled = $script:rows.Count -gt 0
+        $emptyState.Visibility = 'Collapsed'
+        $when = try { ([datetime]$Scan.Timestamp).ToString('MMM d, HH:mm') } catch { "$($Scan.Timestamp)" }
+        $status.Text = "Cached scan of '$($Scan.ScopeLabel)' from $when - $($Scan.RouteCount) route(s), $($Scan.OversharedCount) overshared. Click Scan for live data."
+    }
+    # Shared (non-closure) click handler for Recent-menu items - the item's Tag
+    # carries the parsed scan object, or the '__clear__' sentinel.
+    $onRecentClick = {
+        $t = $this.Tag
+        if ("$t" -eq '__clear__') {
+            try { Get-ChildItem $script:scansDir -Filter *.json -ErrorAction SilentlyContinue | Remove-Item -Force } catch { Write-Verbose "clear scans skipped: $($_.Exception.Message)" }
+            $status.Text = 'Saved scans cleared.'
+            return
+        }
+        & $loadScan $t
+    }
+
     # Populate the One-site picker once, in the background, so choosing a site is
     # a selection rather than a URL to type. Kicked off on connect and again if
     # the user switches to One site before it has loaded.
@@ -1218,7 +1291,30 @@ $guiScript = {
     }
 
     $settingsBtn.Add_Click({ $popup.IsOpen = -not $popup.IsOpen })
-    $overflowBtn.Add_Click({ $status.Text = 'User Access Explorer - a Copilot-readiness oversharing review tool.' })
+    # Overflow (...) opens the Recent-scans menu: reload any past scan instantly.
+    $overflowBtn.Add_Click({
+        $menu = New-Object System.Windows.Controls.ContextMenu
+        $scans = @(& $listScans)
+        if ($scans.Count -eq 0) {
+            $mi = New-Object System.Windows.Controls.MenuItem; $mi.Header = 'No saved scans yet'; $mi.IsEnabled = $false
+            [void]$menu.Items.Add($mi)
+        } else {
+            $hdr = New-Object System.Windows.Controls.MenuItem; $hdr.Header = 'Recent scans (reload instantly)'; $hdr.IsEnabled = $false; $hdr.FontWeight = 'Bold'
+            [void]$menu.Items.Add($hdr)
+            foreach ($s in $scans) {
+                $when = try { ([datetime]$s.Timestamp).ToString('MMM d, HH:mm') } catch { "$($s.Timestamp)" }
+                $mi = New-Object System.Windows.Controls.MenuItem
+                $mi.Header = "$($s.UserDisplay)   -   $($s.ScopeLabel)   -   $when    ($($s.RouteCount) routes, $($s.OversharedCount) overshared)"
+                $mi.Tag = $s
+                $mi.Add_Click($onRecentClick)
+                [void]$menu.Items.Add($mi)
+            }
+            [void]$menu.Items.Add((New-Object System.Windows.Controls.Separator))
+            $clr = New-Object System.Windows.Controls.MenuItem; $clr.Header = 'Clear saved scans'; $clr.Tag = '__clear__'; $clr.Add_Click($onRecentClick)
+            [void]$menu.Items.Add($clr)
+        }
+        $menu.PlacementTarget = $overflowBtn; $menu.Placement = 'Bottom'; $menu.IsOpen = $true
+    })
 
     $pConnect.Add_Click({
         $c = "$($pClient.Text)".Trim(); $a = "$($pAdmin.Text)".Trim()
@@ -1322,6 +1418,7 @@ $guiScript = {
     $script:rows = $null; $script:bgPs = $null; $script:bgRs = $null
     $script:handle = $null; $script:output = $null; $script:seen = 0; $script:timer = $null; $script:cancelled = $false
     $script:lastMode = $null
+    $script:lastUser = $null; $script:lastUserDisplay = $null; $script:lastTarget = $null; $script:lastScopeLabel = $null
 
     $stopBtn.Add_Click({
         if ($script:bgPs) { $script:cancelled = $true; try { $script:bgPs.Stop() } catch { Write-Verbose "$_" } ; $status.Text = 'Stopping...' }
@@ -1369,6 +1466,10 @@ $guiScript = {
         # always empty for site-level rows - so hide them and give Site / Grant
         # path the room instead.
         $script:lastMode = $mode
+        $script:lastUser = $user
+        $script:lastUserDisplay = if ($selected) { "$($selected.Display)" } else { "$user" }
+        $script:lastTarget = $target
+        $script:lastScopeLabel = switch ($mode) { 'Tenant' { 'Whole tenant' } 'Deep' { 'One site (deep)' } default { 'One site' } }
         if ($mode -eq 'Deep') {
             $viewToggle.Visibility = 'Visible'
             $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
@@ -1424,6 +1525,11 @@ $guiScript = {
                 & $showView
                 $progress.Visibility = 'Collapsed'; $stopBtn.Visibility = 'Collapsed'
                 $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
+
+                # persist the completed scan so it can be reloaded instantly later
+                if (-not $script:cancelled -and $script:rows.Count -gt 0) {
+                    & $saveScan $script:lastUser $script:lastUserDisplay $script:lastMode $script:lastScopeLabel $script:lastTarget $script:rows
+                }
 
                 $u = @($script:rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
                 $skipNote = if ($skipped) { " ($skipped site(s) skipped)" } else { "" }
