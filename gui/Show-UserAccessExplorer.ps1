@@ -267,6 +267,62 @@ $guiScript = {
       </Style.Triggers>
     </Style>
 
+    <!-- left-rail navigation item (radio = one active view at a time) -->
+    <Style x:Key="NavItem" TargetType="RadioButton">
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Margin" Value="0,2,0,2"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="ico" Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                           Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ContentPresenter VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#E9ECEF"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="b" Property="Background" Value="#E7F0FB"/>
+                <Setter TargetName="ico" Property="Foreground" Value="{StaticResource Accent}"/>
+                <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- rail item that is an action, not a view (Settings opens the popup) -->
+    <Style x:Key="NavItemBtn" TargetType="Button">
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                           Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ContentPresenter VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#E9ECEF"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- SharePoint brand mark, drawn as vector (Segoe MDL2 has no SharePoint
          glyph). Brand-teal disc with the white "S" swoosh - reads as SharePoint
          without embedding Microsoft's trademarked logo image. -->
@@ -308,8 +364,38 @@ $guiScript = {
     </Style>
   </Window.Resources>
 
-  <!-- one white card on a light canvas -->
-  <Border Margin="14" Background="{StaticResource Surface}" CornerRadius="10"
+  <!-- APP SHELL: left rail + content -->
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- LEFT RAIL -->
+    <Border Grid.Column="0" Width="208" Background="#F4F6F8" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel Margin="16,20,16,16">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,22">
+          <Image Source="{StaticResource SharePointLogo}" Width="26" Height="26" Margin="0,0,10,0" VerticalAlignment="Center"/>
+          <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource Ink}"
+                     TextWrapping="Wrap" Width="120" VerticalAlignment="Center"/>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom">
+          <Border Height="1" Background="{StaticResource Line}" Margin="0,0,0,10"/>
+          <Button x:Name="NavSettings" Style="{StaticResource NavItemBtn}" Content="Settings" Tag="&#xE713;"/>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Top">
+          <TextBlock Text="DISCOVER" FontSize="10.5" FontWeight="SemiBold" Foreground="#9AA0A6" Margin="12,0,0,6"/>
+          <RadioButton x:Name="NavScan"  Style="{StaticResource NavItem}" Content="Scan"        Tag="&#xE721;" IsChecked="True"/>
+          <RadioButton x:Name="NavSaved" Style="{StaticResource NavItem}" Content="Saved scans" Tag="&#xE81C;"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- CONTENT -->
+    <Grid Grid.Column="1">
+
+  <!-- SCAN VIEW: one white card on a light canvas -->
+  <Border x:Name="ScanView" Margin="14" Background="{StaticResource Surface}" CornerRadius="10"
           BorderBrush="{StaticResource Line}" BorderThickness="1">
     <Grid Margin="0">
       <Grid.RowDefinitions>
@@ -698,6 +784,58 @@ $guiScript = {
     </Grid>
   </Border>
 
+  <!-- SAVED SCANS VIEW -->
+  <Border x:Name="SavedView" Visibility="Collapsed" Margin="14" Background="{StaticResource Surface}" CornerRadius="10"
+          BorderBrush="{StaticResource Line}" BorderThickness="1">
+    <Grid Margin="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="20,16,20,12">
+        <TextBlock Text="Saved scans" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+        <TextBlock Text="Reload a past scan instantly - Scan always re-runs live" FontSize="12.5" Foreground="{StaticResource Subtle}" Margin="0,1,0,0"/>
+      </StackPanel>
+      <Border Grid.Row="0" Height="1" Background="{StaticResource Line}" VerticalAlignment="Bottom"/>
+
+      <ScrollViewer Grid.Row="1" Margin="20,8,20,16" VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="SavedList">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="{StaticResource TileBg}" CornerRadius="8" Padding="14,10,10,10" Margin="0,0,0,8"
+                      BorderBrush="{StaticResource Line}" BorderThickness="1">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="OpenScanBtn" Style="{StaticResource Secondary}" Content="Open" Width="72" Height="30" Margin="0,0,8,0"/>
+                    <Button x:Name="DelScanBtn"  Style="{StaticResource IconButton}" Content="&#xE74D;" ToolTip="Delete this saved scan"/>
+                  </StackPanel>
+                  <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{Binding UserDisplay}" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                      <TextBlock Text="  &#xB7;  " Foreground="{StaticResource Subtle}"/>
+                      <TextBlock Text="{Binding ScopeLabel}" Foreground="{StaticResource Subtle}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                      <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
+                      <TextBlock Text="{Binding RouteCount, StringFormat='   &#xB7;   {0} routes'}" FontSize="12" Foreground="#9AA0A6"/>
+                      <TextBlock Text="{Binding OversharedCount, StringFormat=', {0} overshared'}" FontSize="12" Foreground="#B10E1C"/>
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <TextBlock x:Name="SavedEmpty" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="#9AA0A6" FontSize="14" Text="No saved scans yet - run a scan and it will appear here."/>
+    </Grid>
+  </Border>
+
+    </Grid>  <!-- /content -->
+  </Grid>    <!-- /shell -->
+
   <!-- settings popup (connection) -->
 </Window>
 '@
@@ -717,6 +855,8 @@ $guiScript = {
     $exportBtn = & $get 'ExportButton'
     $viewToggle = & $get 'ViewToggle'; $resultsTree = & $get 'ResultsTree'; $scopeNote = & $get 'ScopeNote'
     $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
+    $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
+    $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $navSettings = & $get 'NavSettings'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
     $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
 
@@ -1166,7 +1306,13 @@ $guiScript = {
         if (-not (Test-Path $script:scansDir)) { return @() }
         @(Get-ChildItem $script:scansDir -Filter *.json -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | ForEach-Object {
-                try { Get-Content $_.FullName -Raw | ConvertFrom-Json } catch { Write-Verbose "skipped unreadable scan file: $($_.Exception.Message)" }
+                try {
+                    $j = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    $w = try { ([datetime]$j.Timestamp).ToString('MMM d, yyyy  HH:mm') } catch { "$($j.Timestamp)" }
+                    $j | Add-Member -NotePropertyName When  -NotePropertyValue $w           -Force
+                    $j | Add-Member -NotePropertyName _Path -NotePropertyValue $_.FullName  -Force
+                    $j
+                } catch { Write-Verbose "skipped unreadable scan file: $($_.Exception.Message)" }
             })
     }
     $loadScan = {
@@ -1315,6 +1461,41 @@ $guiScript = {
         }
         $menu.PlacementTarget = $overflowBtn; $menu.Placement = 'Bottom'; $menu.IsOpen = $true
     })
+
+    # --- left-rail navigation -------------------------------------------------
+    $refreshSaved = {
+        $scans = @(& $listScans)
+        $savedList.ItemsSource = $scans
+        $savedEmpty.Visibility = if ($scans.Count -eq 0) { 'Visible' } else { 'Collapsed' }
+    }
+    $navScan.Add_Checked({ $scanView.Visibility = 'Visible'; $savedView.Visibility = 'Collapsed' })
+    $navSaved.Add_Checked({ & $refreshSaved; $savedView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed' })
+    $navSettings.Add_Click({ $popup.PlacementTarget = $navSettings; $popup.IsOpen = $true })
+
+    # Open / Delete buttons live inside the Saved-scans item template; one shared
+    # handler reads the clicked button's DataContext (the scan object).
+    $savedList.AddHandler(
+        [System.Windows.Controls.Primitives.ButtonBase]::ClickEvent,
+        [System.Windows.RoutedEventHandler]{
+            $node = $args[1].OriginalSource
+            while ($node) {
+                if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'OpenScanBtn') {
+                    $scan = $node.DataContext
+                    if ($scan) { & $loadScan $scan; $navScan.IsChecked = $true }
+                    break
+                }
+                if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'DelScanBtn') {
+                    $scan = $node.DataContext
+                    if ($scan -and $scan._Path) {
+                        try { Remove-Item $scan._Path -Force -ErrorAction SilentlyContinue } catch { Write-Verbose "delete scan skipped: $($_.Exception.Message)" }
+                        & $refreshSaved
+                    }
+                    break
+                }
+                $node = [System.Windows.Media.VisualTreeHelper]::GetParent($node)
+            }
+        }
+    )
 
     $pConnect.Add_Click({
         $c = "$($pClient.Text)".Trim(); $a = "$($pAdmin.Text)".Trim()
