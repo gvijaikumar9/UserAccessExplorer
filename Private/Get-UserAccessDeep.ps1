@@ -130,15 +130,21 @@ function Get-UserAccessDeep {
             [string]$Level, $Route, [hashtable]$Meta = @{}, [string]$ObjectKind = '', [int]$ContainerCount = -1,
             [string]$ListId = '', [int]$ItemId = -1
         )
-        # Deep-link to the object's advanced-permissions page (user.aspx), so the
-        # GUI can jump to exactly where the access is managed. The classic page
-        # renders even on modern sites and is the right surface for oversharing -
-        # it shows unique permissions and the Grant / Remove actions.
-        #   item/file/folder : obj={ListId},{ItemId},LISTITEM & List={ListId}
-        #   list/library     : obj={ListId},doclib          & List={ListId}
+        # Deep-link to exactly where THIS access is managed, so the GUI can jump
+        # straight there:
+        #   sharing link     : the Manage Access / sharing dialog (sharedialog.aspx)
+        #                      - where the LINK is actually revoked, not the classic
+        #                      role-assignment page
+        #   item/file/folder : classic item permissions  obj={ListId},{ItemId},LISTITEM & List={ListId}
+        #   list/library     : classic list permissions   obj={ListId},doclib           & List={ListId}
         #   web/site/subsite : the site's own user.aspx
+        # The classic pages render even on modern sites and show the Grant / Remove
+        # actions; a sharing link is better killed from Manage Access.
+        $isLink = "$($Route.Route)" -like 'Sharing link*'
         $permUrl =
-            if ($ListId -and $ItemId -ge 0) {
+            if ($isLink -and $ListId -and $ItemId -ge 0) {
+                "$WebUrl/_layouts/15/sharedialog.aspx?listId=$ListId&listItemId=$ItemId"
+            } elseif ($ListId -and $ItemId -ge 0) {
                 "$WebUrl/_layouts/15/user.aspx?obj=$ListId%2C$ItemId%2CLISTITEM&List=$ListId"
             } elseif ($ListId) {
                 "$WebUrl/_layouts/15/user.aspx?obj=$ListId%2Cdoclib&List=$ListId"

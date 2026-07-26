@@ -427,14 +427,22 @@ $guiScript = {
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <Grid Grid.Column="0" Margin="0,0,10,0">
           <TextBox x:Name="FilterBox" Style="{StaticResource Field}"/>
           <TextBlock x:Name="FilterPlaceholder" Text="Filter sites or groups" Margin="12,0,0,0"
                      VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
         </Grid>
-        <ToggleButton x:Name="ViewToggle" Grid.Column="1" Style="{StaticResource PillToggle}" Content="Tree view" Margin="0,0,10,0" Visibility="Collapsed"/>
-        <Button x:Name="ExportButton" Grid.Column="2" Style="{StaticResource Secondary}" IsEnabled="False">
+        <ToggleButton x:Name="OversharedToggle" Grid.Column="1" Style="{StaticResource PillToggle}" Margin="0,0,10,0"
+                      ToolTip="Show only the routes the user was never explicitly given">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+            <TextBlock Text="Overshared only" VerticalAlignment="Center"/>
+          </StackPanel>
+        </ToggleButton>
+        <ToggleButton x:Name="ViewToggle" Grid.Column="2" Style="{StaticResource PillToggle}" Content="Tree view" Margin="0,0,10,0" Visibility="Collapsed"/>
+        <Button x:Name="ExportButton" Grid.Column="3" Style="{StaticResource Secondary}" IsEnabled="False">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource Glyph}" Text="&#xE896;" FontSize="14" Margin="0,0,6,0"/>
             <TextBlock Text="Export" VerticalAlignment="Center"/>
@@ -708,7 +716,7 @@ $guiScript = {
     $filterBox   = & $get 'FilterBox';    $filterPlace = & $get 'FilterPlaceholder'
     $exportBtn = & $get 'ExportButton'
     $viewToggle = & $get 'ViewToggle'; $resultsTree = & $get 'ResultsTree'; $scopeNote = & $get 'ScopeNote'
-    $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'
+    $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
     $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
 
@@ -893,11 +901,13 @@ $guiScript = {
     # colFilters: field -> the single allowed value for that column (absent = all)
     $script:sortField = $null; $script:sortDir = 'Ascending'; $script:groupField = $null
     $script:colFilters = @{}
+    $script:oversharedOnly = $false
 
     $applyView = {
         $term = "$($filterBox.Text)".Trim().ToLower()
         $view = foreach ($row in $script:allRows) {
             if ($term -and $row.FilterKey -notlike "*$term*") { continue }
+            if ($script:oversharedOnly -and -not $row.IsUnexpected) { continue }
             $keep = $true
             foreach ($fld in $script:colFilters.Keys) {
                 if ("$($row.$fld)" -ne "$($script:colFilters[$fld])") { $keep = $false; break }
@@ -960,6 +970,7 @@ $guiScript = {
         }
     }
     $viewToggle.Add_Click({ & $showView })
+    $oversharedToggle.Add_Click({ $script:oversharedOnly = [bool]$oversharedToggle.IsChecked; & $applyView })
 
     # tree nodes carry the same open-permissions button; open the node's perms page
     $resultsTree.AddHandler(

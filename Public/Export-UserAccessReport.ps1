@@ -50,19 +50,31 @@ function Export-UserAccessReport {
             param($title, $colour, $items)
             if (-not $items) { return '' }
             $trs = foreach ($r in ($items | Sort-Object SiteTitle)) {
+                # Object and PermUrl only exist on deep rows - guard so a site-level
+                # report (which has neither) does not trip StrictMode.
+                $objCell = ''
+                if (($r.PSObject.Properties.Name -contains 'ObjectKind') -and $r.ObjectKind) {
+                    $objCell = if ($r.ObjectKind -eq 'Site') { 'Site' } else { "$($r.ObjectKind): $($r.ObjectTitle)" }
+                }
+                $permCell = ''
+                if (($r.PSObject.Properties.Name -contains 'PermUrl') -and $r.PermUrl) {
+                    $permCell = "<a href=""$(& $enc $r.PermUrl)"">Manage</a>"
+                }
 @"
 <tr>
   <td>$(& $enc $r.SiteTitle)</td>
+  <td>$(& $enc $objCell)</td>
   <td>$(& $enc $r.GrantedVia)</td>
   <td>$(& $enc $r.Permission)</td>
   <td>$(& $enc $r.EffectiveAccess)</td>
+  <td>$permCell</td>
 </tr>
 "@
             }
 @"
 <h2 style="color:$colour">$title ($($items.Count))</h2>
 <table>
-<thead><tr><th>Site</th><th>Granted via</th><th>This route grants</th><th>Overall access</th></tr></thead>
+<thead><tr><th>Site</th><th>Object</th><th>Granted via</th><th>This route grants</th><th>Overall access</th><th>Permissions</th></tr></thead>
 <tbody>
 $([string]::Join("`n", $trs))
 </tbody></table>

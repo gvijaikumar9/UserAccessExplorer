@@ -78,6 +78,20 @@ Describe 'Export-UserAccessReport' {
         # Overshared heading must appear before the Granted heading
         $c.IndexOf('Overshared access') | Should -BeLessThan $c.IndexOf('Granted access')
     }
+    It 'includes object detail and a Manage link for deep rows' {
+        $deep = @(
+            [pscustomobject]@{ User='u'; SiteUrl='s'; SiteTitle='Docs'; ObjectKind='File'; ObjectTitle='Secret.docx'
+                ObjectUrl='https://x/Shared Documents/Secret.docx'
+                PermUrl='https://x/_layouts/15/sharedialog.aspx?listId=g1&listItemId=3'
+                EffectiveAccess='Read'; GrantedVia='Sharing link - Organization / View'; RouteType='Overshared'; Permission='View' }
+        )
+        $h = Join-Path $script:tmp 'deep.html'
+        $deep | Export-UserAccessReport -Path $h -Html
+        $c = Get-Content $h -Raw
+        $c | Should -Match 'File: Secret.docx'   # object column
+        $c | Should -Match '>Manage<'            # permissions link
+        $c | Should -Match 'sharedialog.aspx'    # points at Manage Access
+    }
     It 'HTML-encodes special characters (no injection)' {
         $h = Join-Path $script:tmp 'enc.html'
         $script:sample | Export-UserAccessReport -Path $h -Html
