@@ -80,7 +80,7 @@ $guiScript = {
         Title="User Access Explorer" Height="760" Width="820"
         WindowStartupLocation="CenterScreen" MinWidth="720" MinHeight="600"
         FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13"
-        Background="#EEF0F3">
+        Background="{DynamicResource Canvas}">
   <Window.Resources>
     <SolidColorBrush x:Key="Accent"      Color="#0F6CBD"/>
     <SolidColorBrush x:Key="AccentHover" Color="#115EA3"/>
@@ -93,10 +93,19 @@ $guiScript = {
     <SolidColorBrush x:Key="TileBg"      Color="#F7F8FA"/>
     <SolidColorBrush x:Key="RiskBg"      Color="#FCE7EA"/>
     <SolidColorBrush x:Key="RiskFg"      Color="#B10E1C"/>
+    <SolidColorBrush x:Key="Canvas"       Color="#EEF0F3"/>
+    <SolidColorBrush x:Key="RailBg"       Color="#F4F6F8"/>
+    <SolidColorBrush x:Key="RowBg"        Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="SelBg"        Color="#E9F1FB"/>
+    <SolidColorBrush x:Key="OversharedRow" Color="#FDF3F2"/>
+    <SolidColorBrush x:Key="IconBlue"     Color="#E7F0FB"/>
+    <SolidColorBrush x:Key="IconRed"      Color="#FBE3E6"/>
+    <SolidColorBrush x:Key="IconGreen"    Color="#E7F3EC"/>
+    <SolidColorBrush x:Key="IconPurple"   Color="#EFE9F5"/>
 
     <Style x:Key="Glyph" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
@@ -104,8 +113,8 @@ $guiScript = {
       <Setter Property="Height" Value="36"/>
       <Setter Property="Padding" Value="10,0,10,0"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
-      <Setter Property="BorderBrush" Value="{StaticResource FieldBorder}"/>
-      <Setter Property="Background" Value="{StaticResource Surface}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource FieldBorder}"/>
+      <Setter Property="Background" Value="{DynamicResource Surface}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
@@ -126,8 +135,8 @@ $guiScript = {
       <Setter Property="Height" Value="36"/>
       <Setter Property="Padding" Value="8,0,4,0"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
-      <Setter Property="BorderBrush" Value="{StaticResource FieldBorder}"/>
-      <Setter Property="Background" Value="{StaticResource Surface}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource FieldBorder}"/>
+      <Setter Property="Background" Value="{DynamicResource Surface}"/>
     </Style>
 
     <Style x:Key="Primary" TargetType="Button">
@@ -158,8 +167,8 @@ $guiScript = {
     </Style>
 
     <Style x:Key="Secondary" TargetType="Button">
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
-      <Setter Property="Background" Value="{StaticResource Surface}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="Background" Value="{DynamicResource Surface}"/>
       <Setter Property="Height" Value="36"/>
       <Setter Property="Padding" Value="14,0,14,0"/>
       <Setter Property="Cursor" Value="Hand"/>
@@ -167,7 +176,7 @@ $guiScript = {
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6"
-                    BorderBrush="{StaticResource FieldBorder}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                    BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Padding="{TemplateBinding Padding}">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
@@ -188,7 +197,7 @@ $guiScript = {
       <Setter Property="Width" Value="34"/>
       <Setter Property="Height" Value="34"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -209,12 +218,12 @@ $guiScript = {
       <Setter Property="Height" Value="36"/>
       <Setter Property="Padding" Value="14,0,14,0"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ToggleButton">
-            <Border x:Name="b" Background="{StaticResource Surface}" CornerRadius="6"
-                    BorderBrush="{StaticResource FieldBorder}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+            <Border x:Name="b" Background="{DynamicResource Surface}" CornerRadius="6"
+                    BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Padding="{TemplateBinding Padding}">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
@@ -231,11 +240,11 @@ $guiScript = {
     </Style>
 
     <Style x:Key="TileLabel" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
       <Setter Property="FontSize" Value="12"/>
     </Style>
     <Style x:Key="TileValue" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
       <Setter Property="FontSize" Value="24"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Margin" Value="0,2,0,0"/>
@@ -271,7 +280,7 @@ $guiScript = {
     <Style x:Key="NavItem" TargetType="RadioButton">
       <Setter Property="Height" Value="40"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
       <Setter Property="FontSize" Value="13.5"/>
       <Setter Property="Margin" Value="0,2,0,2"/>
       <Setter Property="Template">
@@ -280,7 +289,7 @@ $guiScript = {
             <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock x:Name="ico" Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
-                           Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                           Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <ContentPresenter VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
@@ -303,7 +312,7 @@ $guiScript = {
       <Setter Property="Height" Value="40"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
       <Setter Property="FontSize" Value="13.5"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -311,7 +320,7 @@ $guiScript = {
             <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
-                           Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                           Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <ContentPresenter VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
@@ -372,15 +381,16 @@ $guiScript = {
     </Grid.ColumnDefinitions>
 
     <!-- LEFT RAIL -->
-    <Border Grid.Column="0" Width="208" Background="#F4F6F8" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Grid.Column="0" Width="208" Background="{DynamicResource RailBg}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel Margin="16,20,16,16">
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,22">
           <Image Source="{StaticResource SharePointLogo}" Width="26" Height="26" Margin="0,0,10,0" VerticalAlignment="Center"/>
-          <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource Ink}"
+          <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}"
                      TextWrapping="Wrap" Width="120" VerticalAlignment="Center"/>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
-          <Border Height="1" Background="{StaticResource Line}" Margin="0,0,0,10"/>
+          <Border Height="1" Background="{DynamicResource Line}" Margin="0,0,0,10"/>
+          <Button x:Name="ThemeToggle" Style="{StaticResource NavItemBtn}" Content="Dark mode" Tag="&#xE708;"/>
           <Button x:Name="NavSettings" Style="{StaticResource NavItemBtn}" Content="Settings" Tag="&#xE713;"/>
         </StackPanel>
         <StackPanel DockPanel.Dock="Top">
@@ -395,8 +405,8 @@ $guiScript = {
     <Grid Grid.Column="1">
 
   <!-- SCAN VIEW: one white card on a light canvas -->
-  <Border x:Name="ScanView" Margin="14" Background="{StaticResource Surface}" CornerRadius="10"
-          BorderBrush="{StaticResource Line}" BorderThickness="1">
+  <Border x:Name="ScanView" Margin="14" Background="{DynamicResource Surface}" CornerRadius="10"
+          BorderBrush="{DynamicResource Line}" BorderThickness="1">
     <Grid Margin="0">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>  <!-- header -->
@@ -411,8 +421,8 @@ $guiScript = {
       <!-- HEADER -->
       <Grid Grid.Row="0" Margin="20,16,14,14">
         <StackPanel VerticalAlignment="Center">
-          <TextBlock Text="User access explorer" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-          <TextBlock Text="What a user can reach, and how they got there" FontSize="12.5" Foreground="{StaticResource Subtle}" Margin="0,1,0,0"/>
+          <TextBlock Text="Scan" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+          <TextBlock Text="What a user can reach, and how they got there" FontSize="12.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Border x:Name="TenantChip" CornerRadius="12" Background="#EDEFF2" Padding="10,4,12,4" VerticalAlignment="Center">
@@ -426,7 +436,7 @@ $guiScript = {
         </StackPanel>
       </Grid>
 
-      <Border Grid.Row="0" Height="1" Background="{StaticResource Line}" VerticalAlignment="Bottom"/>
+      <Border Grid.Row="0" Height="1" Background="{DynamicResource Line}" VerticalAlignment="Bottom"/>
 
       <!-- CONTROLS -->
       <Grid Grid.Row="1" Margin="20,16,20,4">
@@ -473,34 +483,34 @@ $guiScript = {
 
       <!-- STAT TILES -->
       <UniformGrid Grid.Row="2" Rows="1" Columns="4" Margin="20,14,20,6">
-        <Border Background="{StaticResource TileBg}" CornerRadius="8" Margin="0,0,6,0" Padding="14,10,14,10">
+        <Border Background="{DynamicResource TileBg}" CornerRadius="8" Margin="0,0,6,0" Padding="14,10,14,10">
           <StackPanel Orientation="Horizontal">
-            <Border Width="38" Height="38" CornerRadius="8" Background="#E7F0FB" VerticalAlignment="Center" Margin="0,0,12,0">
-              <TextBlock Style="{StaticResource Glyph}" Text="&#xE71B;" FontSize="17" Foreground="#0F6CBD" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconBlue}" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE71B;" FontSize="17" Foreground="#4C9DF0" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <StackPanel VerticalAlignment="Center"><TextBlock Text="Routes found" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileRoutes" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
-        <Border x:Name="TileUnexpectedCard" Background="{StaticResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
+        <Border x:Name="TileUnexpectedCard" Background="{DynamicResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
           <StackPanel Orientation="Horizontal">
-            <Border Width="38" Height="38" CornerRadius="8" Background="#FBE3E6" VerticalAlignment="Center" Margin="0,0,12,0">
-              <TextBlock Style="{StaticResource Glyph}" Text="&#xE7BA;" FontSize="17" Foreground="#B10E1C" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconRed}" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE7BA;" FontSize="17" Foreground="#E85D6B" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <StackPanel VerticalAlignment="Center"><TextBlock Text="Overshared" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileUnexpected" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
-        <Border Background="{StaticResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
+        <Border Background="{DynamicResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
           <StackPanel Orientation="Horizontal">
-            <Border Width="38" Height="38" CornerRadius="8" Background="#E7F3EC" VerticalAlignment="Center" Margin="0,0,12,0">
-              <TextBlock Style="{StaticResource Glyph}" Text="&#xE73E;" FontSize="17" Foreground="#107C41" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconGreen}" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE73E;" FontSize="17" Foreground="#2F9E5E" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <StackPanel VerticalAlignment="Center"><TextBlock Text="Sites reached" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileSites" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
-        <Border Background="{StaticResource TileBg}" CornerRadius="8" Margin="6,0,0,0" Padding="14,10,14,10">
+        <Border Background="{DynamicResource TileBg}" CornerRadius="8" Margin="6,0,0,0" Padding="14,10,14,10">
           <StackPanel Orientation="Horizontal">
-            <Border Width="38" Height="38" CornerRadius="8" Background="#EFE9F5" VerticalAlignment="Center" Margin="0,0,12,0">
-              <TextBlock Style="{StaticResource Glyph}" Text="&#xE72E;" FontSize="17" Foreground="#5C2E91" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconPurple}" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Style="{StaticResource Glyph}" Text="&#xE72E;" FontSize="17" Foreground="#9B6FD4" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <StackPanel VerticalAlignment="Center"><TextBlock Text="Highest access" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileAccess" Text="-" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
@@ -543,18 +553,18 @@ $guiScript = {
           <TextBlock x:Name="ScopeNote" Foreground="#9AA0A6" FontSize="11.5" TextWrapping="Wrap" VerticalAlignment="Center"
                      Text="Each row is a place this user's access is granted (a route) - not every file they can open."/>
         </StackPanel>
-        <Border Height="1" Background="{StaticResource Line}"/>
+        <Border Height="1" Background="{DynamicResource Line}"/>
       </StackPanel>
 
       <!-- RESULTS GRID: one row per route, sortable/filterable/groupable columns -->
       <Grid Grid.Row="5" Margin="20,0,20,0">
         <DataGrid x:Name="ResultsGrid" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed"
                   HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0"
-                  Background="Transparent" RowBackground="White" CanUserAddRows="False"
+                  Background="Transparent" RowBackground="{DynamicResource RowBg}" CanUserAddRows="False"
                   CanUserResizeRows="False" RowHeaderWidth="0" SelectionMode="Single"
                   CanUserSortColumns="False"
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                  EnableRowVirtualization="True" FontSize="13" Foreground="{StaticResource Ink}">
+                  EnableRowVirtualization="True" FontSize="13" Foreground="{DynamicResource Ink}">
           <DataGrid.GroupStyle>
             <GroupStyle>
               <GroupStyle.ContainerStyle>
@@ -576,8 +586,8 @@ $guiScript = {
                                   </Style>
                                 </Ellipse.Style>
                               </Ellipse>
-                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-                              <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{StaticResource Subtle}"/>
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+                              <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource Subtle}"/>
                             </StackPanel>
                           </Expander.Header>
                           <ItemsPresenter/>
@@ -591,7 +601,7 @@ $guiScript = {
           </DataGrid.GroupStyle>
           <DataGrid.ColumnHeaderStyle>
             <Style TargetType="DataGridColumnHeader">
-              <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
               <Setter Property="FontSize" Value="12"/>
               <Setter Property="FontWeight" Value="SemiBold"/>
               <Setter Property="Cursor" Value="Hand"/>
@@ -599,16 +609,16 @@ $guiScript = {
                 <Setter.Value>
                   <ControlTemplate TargetType="DataGridColumnHeader">
                     <Grid>
-                      <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Background="Transparent">
+                      <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Background="Transparent">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,8,2,8">
                           <ContentPresenter VerticalAlignment="Center"/>
                           <!-- sort direction: a small triangle, distinct from the menu chevron -->
-                          <TextBlock x:Name="SortGlyph" Text="" FontSize="8" Foreground="{StaticResource Subtle}"
+                          <TextBlock x:Name="SortGlyph" Text="" FontSize="8" Foreground="{DynamicResource Subtle}"
                                      VerticalAlignment="Center" Margin="6,1,0,0"/>
                           <!-- menu trigger, sits right next to the label like SharePoint -->
                           <Button x:Name="HdrChevron" Background="Transparent" BorderThickness="0" Cursor="Hand"
                                   Padding="2,0,2,0" Margin="4,0,0,0" ToolTip="Sort, group and filter">
-                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE70D;" FontSize="10" Foreground="{StaticResource Subtle}"/>
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE70D;" FontSize="10" Foreground="{DynamicResource Subtle}"/>
                           </Button>
                         </StackPanel>
                       </Border>
@@ -633,7 +643,7 @@ $guiScript = {
             <Style TargetType="DataGridCell">
               <Setter Property="BorderThickness" Value="0"/>
               <Setter Property="Padding" Value="4,10,4,10"/>
-              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
               <Setter Property="Background" Value="Transparent"/>
               <Setter Property="Template">
                 <Setter.Value>
@@ -647,19 +657,19 @@ $guiScript = {
               <Style.Triggers>
                 <!-- keep text visible on selection (default turns it white) -->
                 <Trigger Property="IsSelected" Value="True">
-                  <Setter Property="Background" Value="#E9F1FB"/>
-                  <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                  <Setter Property="Background" Value="{DynamicResource SelBg}"/>
+                  <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
                 </Trigger>
               </Style.Triggers>
             </Style>
           </DataGrid.CellStyle>
           <DataGrid.RowStyle>
             <Style TargetType="DataGridRow">
-              <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+              <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
               <Setter Property="BorderThickness" Value="0,0,0,1"/>
               <Style.Triggers>
                 <DataTrigger Binding="{Binding IsUnexpected}" Value="True">
-                  <Setter Property="Background" Value="#FDF3F2"/>
+                  <Setter Property="Background" Value="{DynamicResource OversharedRow}"/>
                 </DataTrigger>
               </Style.Triggers>
             </Style>
@@ -695,8 +705,8 @@ $guiScript = {
                 <DataTemplate>
                   <StackPanel Orientation="Horizontal" ToolTip="{Binding ObjectUrl}">
                     <TextBlock Style="{StaticResource Glyph}" Text="{Binding ObjectGlyph}" FontSize="13"
-                               Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                    <TextBlock Text="{Binding ObjectLabel}" Foreground="{StaticResource Subtle}"
+                               Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <TextBlock Text="{Binding ObjectLabel}" Foreground="{DynamicResource Subtle}"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                   </StackPanel>
                 </DataTemplate>
@@ -707,7 +717,7 @@ $guiScript = {
                 <Style TargetType="TextBlock">
                   <Setter Property="ToolTip" Value="{Binding ObjectUrl}"/>
                   <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
-                  <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+                  <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
                 </Style>
               </DataGridTextColumn.ElementStyle>
             </DataGridTextColumn>
@@ -727,7 +737,7 @@ $guiScript = {
           <TreeView.ItemContainerStyle>
             <Style TargetType="TreeViewItem">
               <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
               <Setter Property="Padding" Value="2"/>
             </Style>
           </TreeView.ItemContainerStyle>
@@ -737,7 +747,7 @@ $guiScript = {
                 <TextBlock Text="{Binding Glyph}" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="0,0,7,0">
                   <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+                      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
                       <Style.Triggers>
                         <DataTrigger Binding="{Binding Kind}" Value="Site"><Setter Property="Foreground" Value="#036C70"/></DataTrigger>
                         <DataTrigger Binding="{Binding Kind}" Value="Subsite"><Setter Property="Foreground" Value="#036C70"/></DataTrigger>
@@ -747,13 +757,13 @@ $guiScript = {
                     </Style>
                   </TextBlock.Style>
                 </TextBlock>
-                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding CountLabel}" Foreground="#9AA0A6" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
                 <Border Background="{Binding RiskBg}" CornerRadius="9" Padding="7,1,7,1" Margin="10,0,0,0"
                         VerticalAlignment="Center" Visibility="{Binding RiskVisibility}">
                   <TextBlock Text="{Binding RiskText}" Foreground="{Binding RiskFg}" FontSize="10.5" FontWeight="SemiBold"/>
                 </Border>
-                <TextBlock Text="{Binding GrantPath}" Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <TextBlock Text="{Binding GrantPath}" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 <TextBlock Text="{Binding Effective}" Foreground="#9AA0A6" VerticalAlignment="Center" Margin="10,0,0,0" FontStyle="Italic"/>
                 <Button x:Name="PermButton" Style="{StaticResource OpenPermBtn}" Margin="10,0,0,0"/>
               </StackPanel>
@@ -767,7 +777,7 @@ $guiScript = {
       </Grid>
 
       <!-- FOOTER -->
-      <Border Grid.Row="6" Background="#F7F8FA" CornerRadius="0,0,10,10" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,10,14,10">
+      <Border Grid.Row="6" Background="#F7F8FA" CornerRadius="0,0,10,10" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="20,10,14,10">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -777,7 +787,7 @@ $guiScript = {
           <ProgressBar x:Name="Progress" Grid.Column="0" Width="150" Height="6" Minimum="0" Maximum="100"
                        Visibility="Collapsed" VerticalAlignment="Center" Foreground="{StaticResource Accent}" Background="#E3E6EA" BorderThickness="0"/>
           <TextBlock x:Name="StatusText" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
-                     Foreground="{StaticResource Subtle}" Text="Open settings to connect."/>
+                     Foreground="{DynamicResource Subtle}" Text="Open settings to connect."/>
           <Button x:Name="StopButton" Grid.Column="2" Style="{StaticResource Secondary}" Content="Stop" Width="80" Visibility="Collapsed"/>
         </Grid>
       </Border>
@@ -785,25 +795,25 @@ $guiScript = {
   </Border>
 
   <!-- SAVED SCANS VIEW -->
-  <Border x:Name="SavedView" Visibility="Collapsed" Margin="14" Background="{StaticResource Surface}" CornerRadius="10"
-          BorderBrush="{StaticResource Line}" BorderThickness="1">
+  <Border x:Name="SavedView" Visibility="Collapsed" Margin="14" Background="{DynamicResource Surface}" CornerRadius="10"
+          BorderBrush="{DynamicResource Line}" BorderThickness="1">
     <Grid Margin="0">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="20,16,20,12">
-        <TextBlock Text="Saved scans" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-        <TextBlock Text="Reload a past scan instantly - Scan always re-runs live" FontSize="12.5" Foreground="{StaticResource Subtle}" Margin="0,1,0,0"/>
+        <TextBlock Text="Saved scans" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+        <TextBlock Text="Reload a past scan instantly - Scan always re-runs live" FontSize="12.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
       </StackPanel>
-      <Border Grid.Row="0" Height="1" Background="{StaticResource Line}" VerticalAlignment="Bottom"/>
+      <Border Grid.Row="0" Height="1" Background="{DynamicResource Line}" VerticalAlignment="Bottom"/>
 
       <ScrollViewer Grid.Row="1" Margin="20,8,20,16" VerticalScrollBarVisibility="Auto">
         <ItemsControl x:Name="SavedList">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <Border Background="{StaticResource TileBg}" CornerRadius="8" Padding="14,10,10,10" Margin="0,0,0,8"
-                      BorderBrush="{StaticResource Line}" BorderThickness="1">
+              <Border Background="{DynamicResource TileBg}" CornerRadius="8" Padding="14,10,10,10" Margin="0,0,0,8"
+                      BorderBrush="{DynamicResource Line}" BorderThickness="1">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="OpenScanBtn" Style="{StaticResource Secondary}" Content="Open" Width="72" Height="30" Margin="0,0,8,0"/>
@@ -811,9 +821,9 @@ $guiScript = {
                   </StackPanel>
                   <StackPanel>
                     <StackPanel Orientation="Horizontal">
-                      <TextBlock Text="{Binding UserDisplay}" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-                      <TextBlock Text="  &#xB7;  " Foreground="{StaticResource Subtle}"/>
-                      <TextBlock Text="{Binding ScopeLabel}" Foreground="{StaticResource Subtle}"/>
+                      <TextBlock Text="{Binding UserDisplay}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+                      <TextBlock Text="  &#xB7;  " Foreground="{DynamicResource Subtle}"/>
+                      <TextBlock Text="{Binding ScopeLabel}" Foreground="{DynamicResource Subtle}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                       <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
@@ -856,7 +866,7 @@ $guiScript = {
     $viewToggle = & $get 'ViewToggle'; $resultsTree = & $get 'ResultsTree'; $scopeNote = & $get 'ScopeNote'
     $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
-    $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $navSettings = & $get 'NavSettings'
+    $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $navSettings = & $get 'NavSettings'; $themeToggle = & $get 'ThemeToggle'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
     $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
 
@@ -1230,14 +1240,16 @@ $guiScript = {
         $tileSites.Text  = "$(@($rows | Select-Object -ExpandProperty SiteUrl -Unique).Count)"
         $highest = ($rows | Sort-Object @{ e = { & $accessRank $_.EffectiveAccess } } -Descending | Select-Object -First 1).EffectiveAccess
         $tileAccess.Text = if ($highest) { $highest } else { '-' }
-        # tiles that should shout
+        # tiles that should shout. Neutral text/background use the LIVE theme
+        # brushes (from the resource dictionary) so they follow a dark/light swap;
+        # red/green are semantic and read on both themes.
         if ($u -gt 0) { $tileUnexpCard.Background = $riskBgU; $tileUnexp.Foreground = $brRed }
-        else          { $tileUnexpCard.Background = (& $get 'TileUnexpectedCard').Background; $tileUnexp.Foreground = $brInk }
-        $tileAccess.Foreground = if ($highest -eq 'Full Control') { $brRed } elseif ($highest -eq 'Edit') { $brSubtle } else { $brInk }
+        else          { $tileUnexpCard.Background = $window.Resources['TileBg']; $tileUnexp.Foreground = $window.Resources['Ink'] }
+        $tileAccess.Foreground = if ($highest -eq 'Full Control') { $brRed } elseif ($highest -eq 'Edit') { $brSubtle } else { $window.Resources['Ink'] }
     }
 
     # connection state (set on Connect; declared here so $loadSites can read it)
-    $script:clientId = ''; $script:adminUrl = ''
+    $script:clientId = ''; $script:adminUrl = ''; $script:darkMode = $false
 
     # Remember Client ID + admin URL between sessions. Neither is a secret (the
     # client ID is a public app identifier, the URL is just a URL), so plain
@@ -1263,7 +1275,7 @@ $guiScript = {
             $admins  = @(@($AdminUrl)  + @($priorA | Where-Object { $_ -and $_ -ne $AdminUrl })  | Where-Object { $_ } | Select-Object -First 10)
             $dir = Split-Path $script:settingsPath -Parent
             if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-            [pscustomobject]@{ ClientIds = $clients; AdminUrls = $admins } |
+            [pscustomobject]@{ ClientIds = $clients; AdminUrls = $admins; Theme = [bool]$script:darkMode } |
                 ConvertTo-Json | Set-Content -Path $script:settingsPath -Encoding UTF8
         } catch { Write-Verbose "settings save skipped: $($_.Exception.Message)" }
     }
@@ -1471,6 +1483,35 @@ $guiScript = {
     $navScan.Add_Checked({ $scanView.Visibility = 'Visible'; $savedView.Visibility = 'Collapsed' })
     $navSaved.Add_Checked({ & $refreshSaved; $savedView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed' })
     $navSettings.Add_Click({ $popup.PlacementTarget = $navSettings; $popup.IsOpen = $true })
+
+    # --- light / dark theme ---------------------------------------------------
+    # Themeable brushes are DynamicResource; swapping the resource values repaints
+    # the whole UI. Only structural surfaces switch - accents (blue) and risk
+    # colours (red/green) are brand/semantic and read on both themes.
+    $applyTheme = {
+        param($dark)
+        $script:darkMode = [bool]$dark
+        $pal = if ($dark) {
+            @{ Canvas = '#17171A'; Surface = '#232327'; RailBg = '#1D1D21'; Ink = '#ECECEE'; Subtle = '#9AA0A6'; Line = '#35353B'; TileBg = '#2A2A30'; FieldBorder = '#45454C'
+               RowBg = '#232327'; SelBg = '#2C3A4D'; OversharedRow = '#3A2A2E'; IconBlue = '#1E2A3A'; IconRed = '#3A2429'; IconGreen = '#1F3328'; IconPurple = '#2C2440' }
+        } else {
+            @{ Canvas = '#EEF0F3'; Surface = '#FFFFFF'; RailBg = '#F4F6F8'; Ink = '#242424'; Subtle = '#707882'; Line = '#E6E8EB'; TileBg = '#F7F8FA'; FieldBorder = '#C9CDD2'
+               RowBg = '#FFFFFF'; SelBg = '#E9F1FB'; OversharedRow = '#FDF3F2'; IconBlue = '#E7F0FB'; IconRed = '#FBE3E6'; IconGreen = '#E7F3EC'; IconPurple = '#EFE9F5' }
+        }
+        foreach ($k in @($pal.Keys)) {
+            $b = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($pal[$k]))
+            $b.Freeze()
+            # Cast to [Brush] so the RAW .NET brush is stored. The ResourceDictionary
+            # indexer is typed 'object', so an uncast assignment keeps PowerShell's
+            # PSObject wrapper and WPF then fails: "cannot cast PSObject to Brush".
+            $window.Resources[$k] = [System.Windows.Media.Brush]$b
+        }
+        $window.Background = [System.Windows.Media.Brush]$window.Resources['Canvas']
+        $themeToggle.Content = if ($dark) { 'Light mode' } else { 'Dark mode' }
+        $themeToggle.Tag = if ($dark) { [char]0xE706 } else { [char]0xE708 }
+        if ($script:rows -and $script:rows.Count -gt 0) { & $refreshTiles $script:rows }  # reapply the code-set tile brushes
+    }
+    $themeToggle.Add_Click({ & $applyTheme (-not $script:darkMode); & $saveSettings $script:clientId $script:adminUrl })
 
     # Open / Delete buttons live inside the Saved-scans item template; one shared
     # handler reads the clicked button's DataContext (the scan object).
@@ -1729,6 +1770,10 @@ $guiScript = {
     })
 
     # open settings on launch so the first thing a user sees is how to connect
+    # restore the saved theme before the window paints
+    $startSaved = & $loadSettings
+    if ($startSaved -and ($startSaved.PSObject.Properties.Name -contains 'Theme') -and $startSaved.Theme) { & $applyTheme $true }
+
     $window.Add_Loaded({ $popup.IsOpen = $true })
     $null = $window.ShowDialog()
 }
