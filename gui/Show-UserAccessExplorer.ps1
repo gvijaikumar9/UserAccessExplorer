@@ -25,12 +25,41 @@ $guiScript = {
     Import-Module $ModulePath -Force
     $script:ModulePath = $ModulePath
 
+    # Real typed node for the tree. WPF's HierarchicalDataTemplate binds a
+    # nested Children collection reliably on a CLR class, but NOT on a
+    # PSCustomObject note-property (simple props bind, collections silently do
+    # not) - which is why the tree showed only the root.
+    class UaeNode {
+        [string]$Name = ''
+        [string]$Kind = ''
+        [string]$Glyph = ''
+        [string]$Url = ''
+        [string]$PermUrl = ''
+        [string]$RiskText = ''
+        [object]$RiskBg
+        [object]$RiskFg
+        [string]$RiskVisibility = 'Collapsed'
+        [string]$GrantPath = ''
+        [string]$Effective = ''
+        [bool]$IsExpanded = $true
+        [bool]$IsUnexpected = $false
+        [bool]$FromScan = $false
+        [int]$TotalCount = -1
+        [string]$CountLabel = ''
+        [System.Collections.ObjectModel.ObservableCollection[object]]$Children = [System.Collections.ObjectModel.ObservableCollection[object]]::new()
+    }
+
     $script:ScanBlock = {
-        param($ModulePath, $User, $ClientId, $Url, $IsTenant)
+        param($ModulePath, $User, $ClientId, $Url, $Mode)
         Import-Module $ModulePath -Force
         $common = @{ User = $User; ClientId = $ClientId; Interactive = $true }
-        if ($IsTenant) { Get-UserAccess @common -TenantWide -TenantAdminUrl $Url }
-        else           { Get-UserAccess @common -SiteUrl $Url }
+        switch ($Mode) {
+            'Tenant' { Get-UserAccess @common -TenantWide -TenantAdminUrl $Url }
+            # Deep = one site, all the way down (subsites, lists, items) plus the
+            # sharing links a plain permission check can't see. Slow by nature.
+            'Deep'   { Get-UserAccess @common -SiteUrl $Url -Deep -IncludeItems }
+            default  { Get-UserAccess @common -SiteUrl $Url }
+        }
     }
 
     # Enumerate the tenant's content sites so the One-site picker is a selection,
@@ -175,7 +204,7 @@ $guiScript = {
       </Setter>
     </Style>
 
-    <!-- pill toggle (Unexpected only) -->
+    <!-- pill toggle (tree view) -->
     <Style x:Key="PillToggle" TargetType="ToggleButton">
       <Setter Property="Height" Value="36"/>
       <Setter Property="Padding" Value="14,0,14,0"/>
@@ -210,6 +239,72 @@ $guiScript = {
       <Setter Property="FontSize" Value="24"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Margin" Value="0,2,0,0"/>
+    </Style>
+
+    <!-- open-permissions link: a small key-icon button on each object row/node
+         that jumps to that object's advanced-permissions page in SharePoint -->
+    <Style x:Key="OpenPermBtn" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="ToolTip" Value="Open this object's permissions page in SharePoint"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="b" Background="Transparent" CornerRadius="5" Padding="5,3,5,3">
+              <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource Accent}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#E7F0FB"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <!-- synthesised container nodes (no scanned object) carry no PermUrl -->
+        <DataTrigger Binding="{Binding PermUrl}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- SharePoint brand mark, drawn as vector (Segoe MDL2 has no SharePoint
+         glyph). Brand-teal disc with the white "S" swoosh - reads as SharePoint
+         without embedding Microsoft's trademarked logo image. -->
+    <DrawingImage x:Key="SharePointLogo">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#036C70">
+            <GeometryDrawing.Geometry>
+              <EllipseGeometry Center="16,16" RadiusX="15" RadiusY="15"/>
+            </GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing>
+            <GeometryDrawing.Pen>
+              <Pen Brush="White" Thickness="2.7" StartLineCap="Round" EndLineCap="Round"/>
+            </GeometryDrawing.Pen>
+            <GeometryDrawing.Geometry>
+              <PathGeometry Figures="M20.5,11 C20.5,8.3 11.5,8.3 11.5,12 C11.5,15.2 20.5,15.4 20.5,19 C20.5,22.7 11.5,22.7 11.5,20"/>
+            </GeometryDrawing.Geometry>
+          </GeometryDrawing>
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- transparent drag-handle on each column-header edge. The custom header
+         template replaces the default one, which is where WPF normally puts the
+         PART_*HeaderGripper thumbs that let you resize columns - so we add them
+         back by name and the DataGrid wires them up automatically. -->
+    <Style x:Key="ColHeaderGripper" TargetType="Thumb">
+      <Setter Property="Width" Value="8"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Cursor" Value="SizeWE"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Border Background="{TemplateBinding Background}"/>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
   </Window.Resources>
 
@@ -271,9 +366,10 @@ $guiScript = {
 
         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,0">
           <TextBlock Text="Scope" Style="{StaticResource TileLabel}" Margin="0,0,0,4"/>
-          <ComboBox x:Name="ScopeCombo" Style="{StaticResource FieldCombo}" Width="150">
+          <ComboBox x:Name="ScopeCombo" Style="{StaticResource FieldCombo}" Width="175">
             <ComboBoxItem Content="Whole tenant" IsSelected="True"/>
             <ComboBoxItem Content="One site"/>
+            <ComboBoxItem Content="One site (deep)"/>
           </ComboBox>
         </StackPanel>
 
@@ -304,7 +400,7 @@ $guiScript = {
             <Border Width="38" Height="38" CornerRadius="8" Background="#FBE3E6" VerticalAlignment="Center" Margin="0,0,12,0">
               <TextBlock Style="{StaticResource Glyph}" Text="&#xE7BA;" FontSize="17" Foreground="#B10E1C" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
-            <StackPanel VerticalAlignment="Center"><TextBlock Text="Unexpected" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileUnexpected" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
+            <StackPanel VerticalAlignment="Center"><TextBlock Text="Overshared" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileUnexpected" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
         <Border Background="{StaticResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
@@ -330,13 +426,15 @@ $guiScript = {
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <Grid Grid.Column="0" Margin="0,0,10,0">
           <TextBox x:Name="FilterBox" Style="{StaticResource Field}"/>
           <TextBlock x:Name="FilterPlaceholder" Text="Filter sites or groups" Margin="12,0,0,0"
                      VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
         </Grid>
-        <Button x:Name="ExportButton" Grid.Column="1" Style="{StaticResource Secondary}" IsEnabled="False">
+        <ToggleButton x:Name="ViewToggle" Grid.Column="1" Style="{StaticResource PillToggle}" Content="Tree view" Margin="0,0,10,0" Visibility="Collapsed"/>
+        <Button x:Name="ExportButton" Grid.Column="2" Style="{StaticResource Secondary}" IsEnabled="False">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource Glyph}" Text="&#xE896;" FontSize="14" Margin="0,0,6,0"/>
             <TextBlock Text="Export" VerticalAlignment="Center"/>
@@ -344,12 +442,19 @@ $guiScript = {
         </Button>
       </Grid>
 
-      <!-- (column headers are now provided by the DataGrid itself) -->
-      <Border Grid.Row="4" Height="1" Background="{StaticResource Line}" Margin="20,4,20,0"/>
+      <!-- scope note (what the results actually represent) + divider -->
+      <StackPanel Grid.Row="4" Margin="20,2,20,0">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+          <TextBlock Style="{StaticResource Glyph}" Text="&#xE946;" FontSize="12" Foreground="#9AA0A6" VerticalAlignment="Center" Margin="0,0,6,0"/>
+          <TextBlock x:Name="ScopeNote" Foreground="#9AA0A6" FontSize="11.5" TextWrapping="Wrap" VerticalAlignment="Center"
+                     Text="Each row is a place this user's access is granted (a route) - not every file they can open."/>
+        </StackPanel>
+        <Border Height="1" Background="{StaticResource Line}"/>
+      </StackPanel>
 
       <!-- RESULTS GRID: one row per route, sortable/filterable/groupable columns -->
       <Grid Grid.Row="5" Margin="20,0,20,0">
-        <DataGrid x:Name="ResultsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+        <DataGrid x:Name="ResultsGrid" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed"
                   HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0"
                   Background="Transparent" RowBackground="White" CanUserAddRows="False"
                   CanUserResizeRows="False" RowHeaderWidth="0" SelectionMode="Single"
@@ -371,8 +476,8 @@ $guiScript = {
                                   <Style TargetType="Ellipse">
                                     <Setter Property="Fill" Value="#C4C9D0"/>
                                     <Style.Triggers>
-                                      <DataTrigger Binding="{Binding Name}" Value="Unexpected"><Setter Property="Fill" Value="#B10E1C"/></DataTrigger>
-                                      <DataTrigger Binding="{Binding Name}" Value="Expected"><Setter Property="Fill" Value="#107C41"/></DataTrigger>
+                                      <DataTrigger Binding="{Binding Name}" Value="Overshared"><Setter Property="Fill" Value="#B10E1C"/></DataTrigger>
+                                      <DataTrigger Binding="{Binding Name}" Value="Granted"><Setter Property="Fill" Value="#107C41"/></DataTrigger>
                                     </Style.Triggers>
                                   </Style>
                                 </Ellipse.Style>
@@ -399,19 +504,24 @@ $guiScript = {
               <Setter Property="Template">
                 <Setter.Value>
                   <ControlTemplate TargetType="DataGridColumnHeader">
-                    <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Background="Transparent">
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,8,2,8">
-                        <ContentPresenter VerticalAlignment="Center"/>
-                        <!-- sort direction: a small triangle, distinct from the menu chevron -->
-                        <TextBlock x:Name="SortGlyph" Text="" FontSize="8" Foreground="{StaticResource Subtle}"
-                                   VerticalAlignment="Center" Margin="6,1,0,0"/>
-                        <!-- menu trigger, sits right next to the label like SharePoint -->
-                        <Button x:Name="HdrChevron" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                Padding="2,0,2,0" Margin="4,0,0,0" ToolTip="Sort, group and filter">
-                          <TextBlock Style="{StaticResource Glyph}" Text="&#xE70D;" FontSize="10" Foreground="{StaticResource Subtle}"/>
-                        </Button>
-                      </StackPanel>
-                    </Border>
+                    <Grid>
+                      <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Background="Transparent">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,8,2,8">
+                          <ContentPresenter VerticalAlignment="Center"/>
+                          <!-- sort direction: a small triangle, distinct from the menu chevron -->
+                          <TextBlock x:Name="SortGlyph" Text="" FontSize="8" Foreground="{StaticResource Subtle}"
+                                     VerticalAlignment="Center" Margin="6,1,0,0"/>
+                          <!-- menu trigger, sits right next to the label like SharePoint -->
+                          <Button x:Name="HdrChevron" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                  Padding="2,0,2,0" Margin="4,0,0,0" ToolTip="Sort, group and filter">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE70D;" FontSize="10" Foreground="{StaticResource Subtle}"/>
+                          </Button>
+                        </StackPanel>
+                      </Border>
+                      <!-- drag these edges to resize the column -->
+                      <Thumb x:Name="PART_LeftHeaderGripper"  HorizontalAlignment="Left"  Style="{StaticResource ColHeaderGripper}"/>
+                      <Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Style="{StaticResource ColHeaderGripper}"/>
+                    </Grid>
                     <ControlTemplate.Triggers>
                       <Trigger Property="SortDirection" Value="Ascending">
                         <Setter TargetName="SortGlyph" Property="Text" Value="&#x25B2;"/>
@@ -471,17 +581,43 @@ $guiScript = {
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTemplateColumn Header="Site" Width="230" SortMemberPath="SiteTitle">
+            <DataGridTemplateColumn Header="Site" Width="220" SortMemberPath="SiteTitle">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate>
-                  <StackPanel Orientation="Horizontal" ToolTip="{Binding SiteUrl}">
-                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE774;" FontSize="14" Foreground="#0F6CBD" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock Text="{Binding SiteTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                  <DockPanel LastChildFill="True" ToolTip="{Binding SiteUrl}">
+                    <!-- row action: always visible, opens this row's permissions page -->
+                    <Button x:Name="PermButton" DockPanel.Dock="Right" Style="{StaticResource OpenPermBtn}" Margin="6,0,2,0"/>
+                    <StackPanel Orientation="Horizontal">
+                      <!-- proper SharePoint mark (vector), not a globe glyph -->
+                      <Image Source="{StaticResource SharePointLogo}" Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                      <TextBlock Text="{Binding SiteTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                    </StackPanel>
+                  </DockPanel>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn x:Name="ColObject" Header="Object" Width="220" SortMemberPath="ObjectKind">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal" ToolTip="{Binding ObjectUrl}">
+                    <TextBlock Style="{StaticResource Glyph}" Text="{Binding ObjectGlyph}" FontSize="13"
+                               Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <TextBlock Text="{Binding ObjectLabel}" Foreground="{StaticResource Subtle}"
+                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                   </StackPanel>
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTextColumn Header="Grant path" Binding="{Binding GrantPath}" Width="*" MinWidth="240" SortMemberPath="GrantPath">
+            <DataGridTextColumn x:Name="ColLocation" Header="Location" Binding="{Binding Location}" Width="190" SortMemberPath="Location">
+              <DataGridTextColumn.ElementStyle>
+                <Style TargetType="TextBlock">
+                  <Setter Property="ToolTip" Value="{Binding ObjectUrl}"/>
+                  <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                  <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+                </Style>
+              </DataGridTextColumn.ElementStyle>
+            </DataGridTextColumn>
+            <DataGridTextColumn Header="Grant path" Binding="{Binding GrantPath}" Width="*" MinWidth="200" SortMemberPath="GrantPath">
               <DataGridTextColumn.ElementStyle>
                 <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
               </DataGridTextColumn.ElementStyle>
@@ -489,6 +625,48 @@ $guiScript = {
             <DataGridTextColumn Header="Effective" Binding="{Binding Effective}" Width="120" SortMemberPath="Effective"/>
           </DataGrid.Columns>
         </DataGrid>
+
+        <!-- TREE VIEW: Site > Subsite > Library/List > Folder > Item, with
+             expand/collapse and dashed parent-child connector lines. -->
+        <TreeView x:Name="ResultsTree" Visibility="Collapsed" BorderThickness="0" Background="Transparent"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingStackPanel.IsVirtualizing="False">
+          <TreeView.ItemContainerStyle>
+            <Style TargetType="TreeViewItem">
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+              <Setter Property="Padding" Value="2"/>
+            </Style>
+          </TreeView.ItemContainerStyle>
+          <TreeView.ItemTemplate>
+            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+              <StackPanel Orientation="Horizontal" Margin="0,2,0,2" ToolTip="{Binding Url}">
+                <TextBlock Text="{Binding Glyph}" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="0,0,7,0">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding Kind}" Value="Site"><Setter Property="Foreground" Value="#036C70"/></DataTrigger>
+                        <DataTrigger Binding="{Binding Kind}" Value="Subsite"><Setter Property="Foreground" Value="#036C70"/></DataTrigger>
+                        <DataTrigger Binding="{Binding Kind}" Value="Library"><Setter Property="Foreground" Value="#0F6CBD"/></DataTrigger>
+                        <DataTrigger Binding="{Binding Kind}" Value="List"><Setter Property="Foreground" Value="#0F6CBD"/></DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding CountLabel}" Foreground="#9AA0A6" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                <Border Background="{Binding RiskBg}" CornerRadius="9" Padding="7,1,7,1" Margin="10,0,0,0"
+                        VerticalAlignment="Center" Visibility="{Binding RiskVisibility}">
+                  <TextBlock Text="{Binding RiskText}" Foreground="{Binding RiskFg}" FontSize="10.5" FontWeight="SemiBold"/>
+                </Border>
+                <TextBlock Text="{Binding GrantPath}" Foreground="{StaticResource Subtle}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <TextBlock Text="{Binding Effective}" Foreground="#9AA0A6" VerticalAlignment="Center" Margin="10,0,0,0" FontStyle="Italic"/>
+                <Button x:Name="PermButton" Style="{StaticResource OpenPermBtn}" Margin="10,0,0,0"/>
+              </StackPanel>
+            </HierarchicalDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+
         <TextBlock x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center"
                    Foreground="#9AA0A6" FontSize="14" TextAlignment="Center" MaxWidth="440" TextWrapping="Wrap"
                    Text="Connect, pick a user, and run a scan to see what they can reach - and how."/>
@@ -529,6 +707,8 @@ $guiScript = {
     $tileSites   = & $get 'TileSites';    $tileAccess = & $get 'TileAccess'
     $filterBox   = & $get 'FilterBox';    $filterPlace = & $get 'FilterPlaceholder'
     $exportBtn = & $get 'ExportButton'
+    $viewToggle = & $get 'ViewToggle'; $resultsTree = & $get 'ResultsTree'; $scopeNote = & $get 'ScopeNote'
+    $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
     $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
 
@@ -561,9 +741,36 @@ $guiScript = {
         param($rows)
         $out = foreach ($r in $rows) {
             $via     = & $cleanVia $r.GrantedVia
-            $isUnexp = $r.RouteType -eq 'Unexpected'
+            $isUnexp = $r.RouteType -eq 'Overshared'
             $isRoot  = "$($r.SiteUrl)" -notmatch '/(sites|teams)/'
             $site    = if ($isRoot) { "$($r.SiteTitle) (root)" } else { "$($r.SiteTitle)" }
+
+            # Deep rows carry a precise object kind (Site/Subsite/Library/List/
+            # Folder/File/Item); site-level rows do not, so their Object is blank.
+            $objKind  = if ($r.PSObject.Properties.Name -contains 'ObjectKind') { "$($r.ObjectKind)" } else { '' }
+            $objTitle = if ($r.PSObject.Properties.Name -contains 'ObjectTitle') { "$($r.ObjectTitle)" } else { '' }
+            $objUrl   = if (($r.PSObject.Properties.Name -contains 'ObjectUrl') -and $r.ObjectUrl) { "$($r.ObjectUrl)" } else { "$($r.SiteUrl)" }
+            $objLabel =
+                if (-not $objKind)           { '' }
+                elseif ($objKind -eq 'Site') { 'Site' }
+                else                         { "$objKind : $objTitle" }
+            $objGlyph = switch ($objKind) {
+                'Site'    { [char]0xE774 }  'Subsite' { [char]0xE774 }   # globe
+                'Library' { [char]0xE8F1 }                                # library
+                'List'    { [char]0xE8FD }                                # bulleted list
+                'Folder'  { [char]0xE8B7 }                                # folder
+                'File'    { [char]0xE7C3 }  'Item'    { [char]0xE7C3 }   # page
+                default   { '' }
+            }
+
+            # breadcrumb of where the object lives, so the hierarchy is legible
+            # without a tree: Library > Folder > subfolder (the object's container)
+            $rel  = "$objUrl" -replace '^https?://[^/]+', '' -replace '^/(sites|teams)/[^/]+', ''
+            $segs = @($rel.Trim('/') -split '/' | Where-Object { $_ })
+            if ($segs.Count -gt 0 -and $segs[0] -eq 'Lists') { $segs = @($segs | Select-Object -Skip 1) }
+            $sep = " $([char]0x203A) "
+            $location = if ($segs.Count -gt 1) { ($segs[0..($segs.Count - 2)] -join $sep) } else { '' }
+
             [pscustomobject]@{
                 RiskText     = $r.RouteType
                 RiskBg       = if ($isUnexp) { $riskBgU } else { $riskBgE }
@@ -571,13 +778,115 @@ $guiScript = {
                 IsUnexpected = $isUnexp
                 SiteTitle    = $site
                 SiteUrl      = $r.SiteUrl
+                ObjectKind   = $objKind
+                ObjectLabel  = $objLabel
+                ObjectGlyph  = $objGlyph
+                ObjectUrl    = $objUrl
+                PermUrl      = if (($r.PSObject.Properties.Name -contains 'PermUrl') -and $r.PermUrl) { "$($r.PermUrl)" } else { "$objUrl/_layouts/15/user.aspx" }
+                Location     = $location
                 GrantPath    = if ($r.Permission) { "$via -> $($r.Permission)" } else { "$via" }
                 Effective    = $r.EffectiveAccess
-                FilterKey    = "$($r.SiteTitle) $($r.SiteUrl) $via $($r.Permission) $($r.RouteType)".ToLower()
+                FilterKey    = "$($r.SiteTitle) $($r.SiteUrl) $objKind $objLabel $location $via $($r.Permission) $($r.RouteType)".ToLower()
             }
         }
         # unexpected first, then by site
         @($out | Sort-Object @{ e = { if ($_.IsUnexpected) { 0 } else { 1 } } }, SiteTitle)
+    }
+
+    $glyphForKind = {
+        param($kind)
+        switch ($kind) {
+            'Site'    { [char]0xE774 }  'Subsite' { [char]0xE774 }
+            'Library' { [char]0xE8F1 }  'List'    { [char]0xE8FD }
+            'Folder'  { [char]0xE8B7 }
+            'File'    { [char]0xE7C3 }  'Item'    { [char]0xE7C3 }
+            default   { [char]0xE7C3 }
+        }
+    }
+
+    # Build the Site > Library/List > Folder > Item hierarchy from the flat deep
+    # rows. Intermediate containers that had no access row of their own are
+    # synthesised from the path so the tree has no gaps.
+    $buildTree = {
+        param($rows)
+        $rows = [object[]]$rows   # cast, not @() - @() on a List throws in PS 7.6.3
+        if ($rows.Count -eq 0) { return $null }
+
+        $mkNode = {
+            param($name, $kind, $url, $fromScan = $false, $permUrl = '')
+            $n = [UaeNode]::new()
+            $n.Name = "$name"; $n.Kind = $kind; $n.Glyph = (& $glyphForKind $kind); $n.Url = "$url"
+            $n.PermUrl = "$permUrl"
+            $n.RiskBg = $riskBgE; $n.RiskFg = $riskFgE; $n.FromScan = $fromScan
+            $n
+        }
+
+        $root = & $mkNode $rows[0].SiteTitle 'Site' $rows[0].SiteUrl $false "$($rows[0].SiteUrl)/_layouts/15/user.aspx"
+        $index = @{ '' = $root }
+
+        # shallow paths first, so a container exists before its children
+        foreach ($r in ($rows | Sort-Object @{ e = { ("$($_.ObjectUrl)" -split '/').Count } })) {
+            $rel  = "$($r.ObjectUrl)" -replace '^https?://[^/]+', '' -replace '^/(sites|teams)/[^/]+', ''
+            $segs = @($rel.Trim('/') -split '/' | Where-Object { $_ })
+            if ($segs.Count -gt 0 -and $segs[0] -eq 'Lists') { $segs = @($segs | Select-Object -Skip 1) }
+
+            $cc = if ($r.PSObject.Properties.Name -contains 'ContainerCount') { [int]$r.ContainerCount } else { -1 }
+            $target = $root
+            if ($segs.Count -gt 0) {
+                $parent = $root; $path = ''
+                for ($i = 0; $i -lt $segs.Count; $i++) {
+                    $path = "$path/$($segs[$i])"
+                    $isLeaf = ($i -eq $segs.Count - 1)
+                    if (-not $index.ContainsKey($path)) {
+                        $leafPerm = if (($r.PSObject.Properties.Name -contains 'PermUrl') -and $r.PermUrl) { "$($r.PermUrl)" } else { '' }
+                        $node = if ($isLeaf) { & $mkNode $r.ObjectTitle $r.ObjectKind $r.ObjectUrl $true $leafPerm }
+                                else          { & $mkNode $segs[$i] $(if ($i -eq 0) { 'Library' } else { 'Folder' }) '' $false }
+                        [void]$parent.Children.Add($node)
+                        $index[$path] = $node
+                    }
+                    # the top-level container (list/library) carries the item total
+                    if ($i -eq 0 -and $cc -ge 0 -and $index[$path].TotalCount -lt 0) { $index[$path].TotalCount = $cc }
+                    $parent = $index[$path]
+                }
+                $target = $parent
+            }
+
+            # stamp the access info onto the object node (prefer an overshared route)
+            $isUnexp = $r.RouteType -eq 'Overshared'
+            if ($isUnexp -or $target.RiskText -eq '') {
+                $via = & $cleanVia $r.GrantedVia
+                $target.GrantPath = if ($r.Permission) { "$via -> $($r.Permission)" } else { "$via" }
+                $target.Effective = $r.EffectiveAccess
+            }
+            if ($isUnexp) { $target.IsUnexpected = $true }
+            if ($target.IsUnexpected) {
+                $target.RiskText = 'Overshared'; $target.RiskBg = $riskBgU; $target.RiskFg = $riskFgU; $target.RiskVisibility = 'Visible'
+            } elseif ($target -ne $root) {
+                $target.RiskText = 'Granted'; $target.RiskBg = $riskBgE; $target.RiskFg = $riskFgE; $target.RiskVisibility = 'Visible'
+            }
+        }
+
+        # On each list/library (the nodes that carry a total), annotate how many
+        # of its items actually had their own permissions - so "3 of 400" makes
+        # clear the other 397 inherit and were not a distinct access route.
+        $countReal = {
+            param($node)
+            $c = 0
+            foreach ($child in $node.Children) {
+                if ($child.FromScan) { $c++ }
+                $c += (& $countReal $child)
+            }
+            $c
+        }
+        $annotate = {
+            param($node)
+            if ($node.TotalCount -ge 0) {
+                $node.CountLabel = "$(& $countReal $node) of $($node.TotalCount) with unique permissions"
+            }
+            foreach ($child in $node.Children) { & $annotate $child }
+        }
+        & $annotate $root
+        return $root
     }
 
     # sort / group / per-column filter state, driven by the header menus.
@@ -622,10 +931,53 @@ $guiScript = {
             } else { $null }
         }
 
+        # Only show the grid once it has data. An empty DataGrid with a star column
+        # collapses its fixed columns into a crammed strip of headers, so keep it
+        # hidden (the empty-state text covers the "nothing yet" case) until rows exist.
+        if (-not [bool]$viewToggle.IsChecked) {
+            $list.Visibility = if ($script:allRows.Count -gt 0) { 'Visible' } else { 'Collapsed' }
+        }
+
         $empty = ($view.Count -eq 0 -and $script:allRows.Count -gt 0)
         $emptyState.Visibility = if ($empty) { 'Visible' } else { 'Collapsed' }
         if ($empty) { $emptyState.Text = 'No rows match the current filter.' }
     }
+
+    # Grid <-> Tree. The grid is the analyst view (filter/sort/group); the tree
+    # is the structure view (Site > Library > Folder > Item, expand/collapse).
+    $showView = {
+        if ([bool]$viewToggle.IsChecked) {
+            $root = & $buildTree $script:rows
+            $col = New-Object System.Collections.ObjectModel.ObservableCollection[object]
+            if ($root) { [void]$col.Add($root) }
+            $resultsTree.ItemsSource = $col
+            $resultsTree.Visibility = 'Visible'; $list.Visibility = 'Collapsed'
+            $kids = if ($root) { $root.Children.Count } else { 0 }
+            $status.Text = "Tree view: $kids top-level branch(es) under the site."
+        } else {
+            $resultsTree.Visibility = 'Collapsed'
+            $list.Visibility = if ($script:allRows.Count -gt 0) { 'Visible' } else { 'Collapsed' }
+        }
+    }
+    $viewToggle.Add_Click({ & $showView })
+
+    # tree nodes carry the same open-permissions button; open the node's perms page
+    $resultsTree.AddHandler(
+        [System.Windows.Controls.Primitives.ButtonBase]::ClickEvent,
+        [System.Windows.RoutedEventHandler]{
+            $node = $args[1].OriginalSource
+            while ($node) {
+                if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'PermButton') {
+                    $ctx = $node.DataContext
+                    if ($ctx -and $ctx.PermUrl) {
+                        try { Start-Process $ctx.PermUrl } catch { $status.Text = "Could not open the permissions page: $($_.Exception.Message)" }
+                    }
+                    break
+                }
+                $node = [System.Windows.Media.VisualTreeHelper]::GetParent($node)
+            }
+        }
+    )
 
     # One shared, script-scope handler for every header menu item. The item's
     # Tag carries { Field; Action }. NOT a closure: closures get their own scope
@@ -652,6 +1004,14 @@ $guiScript = {
             $e = $args[1]
             $isChevron = $false; $chevron = $null; $node = $e.OriginalSource
             while ($node) {
+                # a row's open-permissions button: jump to that object's perms page
+                if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'PermButton') {
+                    $ctx = $node.DataContext
+                    if ($ctx -and $ctx.PermUrl) {
+                        try { Start-Process $ctx.PermUrl } catch { $status.Text = "Could not open the permissions page: $($_.Exception.Message)" }
+                    }
+                    return
+                }
                 if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'HdrChevron') { $isChevron = $true; $chevron = $node }
                 if ($node -is [System.Windows.Controls.Primitives.DataGridColumnHeader]) { break }
                 $node = [System.Windows.Media.VisualTreeHelper]::GetParent($node)
@@ -714,7 +1074,7 @@ $guiScript = {
         # "Argument types do not match". The cast handles both a List and @().
         $rows = [object[]]$rows
         $tileRoutes.Text = "$($rows.Count)"
-        $u = @($rows | Where-Object { $_.RouteType -eq 'Unexpected' }).Count
+        $u = @($rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
         $tileUnexp.Text  = "$u"
         $tileSites.Text  = "$(@($rows | Select-Object -ExpandProperty SiteUrl -Unique).Count)"
         $highest = ($rows | Sort-Object @{ e = { & $accessRank $_.EffectiveAccess } } -Descending | Select-Object -First 1).EffectiveAccess
@@ -803,7 +1163,7 @@ $guiScript = {
 
     # scope combo shows/hides the site row and kicks off the site list
     $scopeCombo.Add_SelectionChanged({
-        if ($scopeCombo.SelectedIndex -eq 1) { $siteRow.Visibility = 'Visible'; & $loadSites; $siteCombo.Focus() }
+        if ($scopeCombo.SelectedIndex -ge 1) { $siteRow.Visibility = 'Visible'; & $loadSites; $siteCombo.Focus() }
         else { $siteRow.Visibility = 'Collapsed' }
     })
 
@@ -915,7 +1275,16 @@ $guiScript = {
             $userCombo.ItemsSource = $items
             $userCombo.IsDropDownOpen = ($items.Count -gt 0)
             $status.Text = if ($items.Count) { "$($items.Count) match(es). Pick one, then Scan." } else { "No users start with '$term'." }
-        } catch { $status.Text = "Search failed: $($_.Exception.Message)" }
+        } catch {
+            $m = "$($_.Exception.Message)"
+            # A missing Graph directory scope is the common cause - name the fix and
+            # remind them they can still scan by typing the whole address.
+            if ($m -match 'Authorization_RequestDenied|Forbidden|403|does not have permission|insufficient|Access.?denied') {
+                $status.Text = "User search needs the Graph User.ReadBasic.All permission consented for this app. You can still type the full email address and click Scan."
+            } else {
+                $status.Text = "Search failed: $m"
+            }
+        }
     })
     $userCombo.Add_KeyUp({
         & $ph $userCombo $userPlace
@@ -941,6 +1310,7 @@ $guiScript = {
     # --- scan ----------------------------------------------------------------
     $script:rows = $null; $script:bgPs = $null; $script:bgRs = $null
     $script:handle = $null; $script:output = $null; $script:seen = 0; $script:timer = $null; $script:cancelled = $false
+    $script:lastMode = $null
 
     $stopBtn.Add_Click({
         if ($script:bgPs) { $script:cancelled = $true; try { $script:bgPs.Stop() } catch { Write-Verbose "$_" } ; $status.Text = 'Stopping...' }
@@ -953,7 +1323,8 @@ $guiScript = {
                 else { $null }
         if (-not $user) { $status.Text = 'Pick a user from the search list first.'; return }
 
-        $isTenant = ($scopeCombo.SelectedIndex -eq 0)
+        $mode = switch ($scopeCombo.SelectedIndex) { 0 { 'Tenant' } 2 { 'Deep' } default { 'Site' } }
+        $isTenant = ($mode -eq 'Tenant')
         $siteSel = $siteCombo.SelectedItem
         $target = if ($isTenant) { $script:adminUrl }
                   elseif ($siteSel) { "$($siteSel.Url)" }
@@ -963,18 +1334,44 @@ $guiScript = {
         $script:rows = New-Object System.Collections.Generic.List[object]
         $script:allRows = @(); $list.ItemsSource = [object[]]@()
         $script:seen = 0; $script:cancelled = $false
+        # start both hidden; the grid appears once the first rows stream in
+        # (applyView), the tree (deep only) is rendered on completion
+        $resultsTree.Visibility = 'Collapsed'; $list.Visibility = 'Collapsed'
         & $refreshTiles @()
         $emptyState.Visibility = 'Collapsed'
         $scanBtn.IsEnabled = $false; $exportBtn.IsEnabled = $false
         $progress.Visibility = 'Visible'; $progress.IsIndeterminate = -not $isTenant; $progress.Value = 0
         $stopBtn.Visibility = 'Visible'
-        $status.Text = "Scanning $user..."
+        $status.Text = if ($mode -eq 'Deep') { "Deep scan of $target - walking subsites, lists and items. This can take a while..." } else { "Scanning $user..." }
+        $scopeNote.Text = if ($mode -eq 'Deep') {
+            "Deep scan: sites, libraries, folders and items that have their OWN permissions (broken inheritance). Content that inherits is covered by the access shown above it - it is not listed item by item."
+        } else {
+            "Each row is a route that grants this user access to a site - the sites they can reach and how. Individual files are not listed; they inherit the site's access."
+        }
+
+        # The tree shows one site's Site > Library > Folder > Item hierarchy, so it
+        # only applies to a deep scan. Hide it for tenant / site-level, and make it
+        # the default view for deep - but only ONCE the scan finishes (set in the
+        # completion handler). During the scan we keep IsChecked false so rows
+        # stream visibly into the grid instead of a blank pane.
+        # The Object and Location columns are deep-scan concepts too - they are
+        # always empty for site-level rows - so hide them and give Site / Grant
+        # path the room instead.
+        $script:lastMode = $mode
+        if ($mode -eq 'Deep') {
+            $viewToggle.Visibility = 'Visible'
+            $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
+        } else {
+            $viewToggle.Visibility = 'Collapsed'
+            $colObject.Visibility = 'Collapsed'; $colLocation.Visibility = 'Collapsed'
+        }
+        $viewToggle.IsChecked = $false
 
         $script:bgRs = [runspacefactory]::CreateRunspace(); $script:bgRs.Open()
         $script:bgPs = [powershell]::Create(); $script:bgPs.Runspace = $script:bgRs
         [void]$script:bgPs.AddScript($script:ScanBlock).
             AddArgument($script:ModulePath).AddArgument($user).AddArgument($script:clientId).
-            AddArgument($target).AddArgument($isTenant)
+            AddArgument($target).AddArgument($mode)
 
         $script:output = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
         $inbuf = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
@@ -1011,12 +1408,15 @@ $guiScript = {
                 $script:allRows = & $buildRows $script:rows
                 & $refreshTiles $script:rows
                 & $applyView
+                # deep results land in the tree; flip to it now that rows are in
+                if ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0) { $viewToggle.IsChecked = $true }
+                & $showView
                 $progress.Visibility = 'Collapsed'; $stopBtn.Visibility = 'Collapsed'
                 $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
 
-                $u = @($script:rows | Where-Object { $_.RouteType -eq 'Unexpected' }).Count
+                $u = @($script:rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
                 $skipNote = if ($skipped) { " ($skipped site(s) skipped)" } else { "" }
-                if ($script:cancelled) { $status.Text = "Stopped. $($script:rows.Count) route(s) collected, $u unexpected." }
+                if ($script:cancelled) { $status.Text = "Stopped. $($script:rows.Count) route(s) collected, $u overshared." }
                 elseif ($failMsg -and $script:rows.Count -eq 0) {
                     $emptyState.Text = "Scan failed: $failMsg"; $emptyState.Visibility = 'Visible'; $status.Text = "Failed: $failMsg"
                 }
@@ -1024,7 +1424,7 @@ $guiScript = {
                     $emptyState.Text = 'No access found - this user cannot reach the scanned scope.'; $emptyState.Visibility = 'Visible'
                     $status.Text = 'Done: no access found.'
                 }
-                else { $status.Text = "Done: $($script:rows.Count) route(s), $u unexpected$skipNote." }
+                else { $status.Text = "Done: $($script:rows.Count) route(s), $u overshared$skipNote." }
             }
         })
         $script:timer.Start()

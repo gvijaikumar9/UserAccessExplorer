@@ -62,7 +62,7 @@ function Test-SharingLinkAudience {
         Level = $(if ($type -match 'Edit|Review') { 'Edit' } else { 'Read' })
         Route = [pscustomobject]@{
             Route      = "Sharing link - $scope / $type ($why)"
-            Type       = 'Unexpected'
+            Type       = 'Overshared'
             Permission = $type
         }
     }

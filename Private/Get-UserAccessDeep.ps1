@@ -37,7 +37,10 @@ function Get-UserAccessDeep {
         [int] $BatchSize = 100,
 
         # Safety valve for very large lists. 0 = no cap.
-        [int] $MaxItemsPerList = 0
+        [int] $MaxItemsPerList = 0,
+
+        # Per-scan (user,group) -> membership cache, shared across sites.
+        [hashtable] $MembershipCache = @{}
     )
 
     $userDisplay = ($UserLogin -split '\|')[-1]
@@ -58,7 +61,7 @@ function Get-UserAccessDeep {
             classification as the site-level engine, plus the sharing-link route
             which only appears below the web.
         #>
-        param($Object, [string]$ObjectLabel)
+        param($Object, [string]$ObjectLabel, [hashtable]$MembershipCache = @{})
 
         if (-not $Object) { return }
 
@@ -82,15 +85,15 @@ function Get-UserAccessDeep {
             if (Test-SharingLinkGroup $mTitle $mLogin) {
                 $kind  = Get-SharingLinkKind $mTitle
                 $route = "Sharing link ($kind)"
-                $routeType = 'Unexpected'
+                $routeType = 'Overshared'
             }
             elseif (Test-EveryoneClaim $mLogin $mTitle) {
                 $route = "Everyone claim ($mTitle)"
-                $routeType = 'Unexpected'
+                $routeType = 'Overshared'
             }
             elseif ($mType -eq 'User' -and $mLogin -eq $UserLogin) {
                 $route = 'Direct grant'
-                $routeType = 'Expected'
+                $routeType = 'Granted'
             }
             elseif ($mType -eq 'SharePointGroup') {
                 $mem = @(Invoke-WithRetry -Because "members of $mTitle" -Action {
@@ -100,12 +103,20 @@ function Get-UserAccessDeep {
                 # StrictMode exactly like $null.LoginName.
                 if ($mem | Where-Object { $_.LoginName -eq $UserLogin }) {
                     $route = "SharePoint group '$mTitle'"
-                    $routeType = 'Expected'
+                    $routeType = 'Granted'
                 }
             }
             elseif ($mType -eq 'SecurityGroup') {
-                $route = "Entra group '$mTitle' (membership unconfirmed)"
-                $routeType = 'Expected'
+                # Confirm the user is actually in the Entra/M365 group (transitively,
+                # so nesting counts). Drop confirmed non-members; keep the honest
+                # "unconfirmed" label when Graph cannot answer.
+                $gid = Get-GroupIdFromLogin $mLogin
+                $isMember = if ($gid) { Test-UserIsGroupMember -UserUpn $userDisplay -GroupId $gid -Cache $MembershipCache } else { $null }
+                if ($isMember -ne $false) {
+                    $suffix = if ($isMember) { '' } else { ' (membership unconfirmed)' }
+                    $route = "Entra group '$mTitle'$suffix"
+                    $routeType = 'Granted'
+                }
             }
 
             if ($route) { [pscustomobject]@{ Route = $route; Type = $routeType; Permission = $roles } }
@@ -116,16 +127,35 @@ function Get-UserAccessDeep {
         param(
             [string]$WebUrl, [string]$WebTitle,
             [string]$ObjectType, [string]$ObjectTitle, [string]$ObjectUrl,
-            [string]$Level, $Route, [hashtable]$Meta = @{}
+            [string]$Level, $Route, [hashtable]$Meta = @{}, [string]$ObjectKind = '', [int]$ContainerCount = -1,
+            [string]$ListId = '', [int]$ItemId = -1
         )
+        # Deep-link to the object's advanced-permissions page (user.aspx), so the
+        # GUI can jump to exactly where the access is managed. The classic page
+        # renders even on modern sites and is the right surface for oversharing -
+        # it shows unique permissions and the Grant / Remove actions.
+        #   item/file/folder : obj={ListId},{ItemId},LISTITEM & List={ListId}
+        #   list/library     : obj={ListId},doclib          & List={ListId}
+        #   web/site/subsite : the site's own user.aspx
+        $permUrl =
+            if ($ListId -and $ItemId -ge 0) {
+                "$WebUrl/_layouts/15/user.aspx?obj=$ListId%2C$ItemId%2CLISTITEM&List=$ListId"
+            } elseif ($ListId) {
+                "$WebUrl/_layouts/15/user.aspx?obj=$ListId%2Cdoclib&List=$ListId"
+            } else {
+                "$WebUrl/_layouts/15/user.aspx"
+            }
         [pscustomobject]@{
             User            = $userDisplay
             SiteUrl         = $SiteUrl
             WebUrl          = $WebUrl
             SiteTitle       = $WebTitle
-            ObjectType      = $ObjectType      # Web | List | Item
+            ObjectType      = $ObjectType      # Web | List | Item (coarse - kept for compatibility)
+            ObjectKind      = $ObjectKind      # Site | Subsite | Library | List | Folder | File | Item
+            ContainerCount  = $ContainerCount  # total items in the containing list/library (-1 = n/a)
             ObjectTitle     = $ObjectTitle
             ObjectUrl       = $ObjectUrl
+            PermUrl         = $permUrl         # advanced-permissions page for this object
             EffectiveAccess = $Level
             GrantedVia      = $Route.Route
             RouteType       = $Route.Type
@@ -165,9 +195,10 @@ function Get-UserAccessDeep {
         Invoke-WithRetry -Because 'web effective permissions' -Action { $ctx.ExecuteQuery() }
         $webLevel = Resolve-Level $wPerms
 
+        $webKind = if ($webUrl -eq $SiteUrl) { 'Site' } else { 'Subsite' }
         if ($webLevel -ne 'None') {
-            foreach ($r in (Get-Route -Object $web -ObjectLabel $webTitle)) {
-                ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'Web' `
+            foreach ($r in (Get-Route -Object $web -ObjectLabel $webTitle -MembershipCache $MembershipCache)) {
+                ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'Web' -ObjectKind $webKind `
                         -ObjectTitle $webTitle -ObjectUrl $webUrl -Level $webLevel -Route $r
             }
         }
@@ -187,15 +218,17 @@ function Get-UserAccessDeep {
 
         foreach ($list in $lists) {
             $listUrl = "$webUrl/$($list.Title)"
+            $listKind = if ("$($list.BaseType)" -eq 'DocumentLibrary') { 'Library' } else { 'List' }
 
             if ($list.HasUniqueRoleAssignments) {
                 $lPerms = $list.GetUserEffectivePermissions($UserLogin)
                 Invoke-WithRetry -Because "list perms $($list.Title)" -Action { $ctx.ExecuteQuery() }
                 $listLevel = Resolve-Level $lPerms
                 if ($listLevel -ne 'None') {
-                    foreach ($r in (Get-Route -Object $list -ObjectLabel $list.Title)) {
-                        ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'List' `
-                                -ObjectTitle $list.Title -ObjectUrl $listUrl -Level $listLevel -Route $r
+                    foreach ($r in (Get-Route -Object $list -ObjectLabel $list.Title -MembershipCache $MembershipCache)) {
+                        ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'List' -ObjectKind $listKind `
+                                -ObjectTitle $list.Title -ObjectUrl $listUrl -Level $listLevel -Route $r -ContainerCount $list.ItemCount `
+                                -ListId $list.Id
                     }
                 }
             }
@@ -243,6 +276,7 @@ function Get-UserAccessDeep {
                     # list and a library - file size simply does not exist on a
                     # list item, so only include what is actually present.
                     $meta = @{ ItemType = "$($it.FileSystemObjectType)" }
+                    $itemKind = switch ("$($it.FileSystemObjectType)") { 'Folder' { 'Folder' } 'File' { 'File' } default { 'Item' } }
                     foreach ($pair in @(@('Modified','Modified'), @('Created','Created'))) {
                         if ($fv.ContainsKey($pair[0])) { $meta[$pair[1]] = $fv[$pair[0]] }
                     }
@@ -256,7 +290,7 @@ function Get-UserAccessDeep {
 
                     # Walk the role assignments ONCE, then answer two independent
                     # questions from it - they have different answers.
-                    $allRoutes    = @(Get-Route -Object $it -ObjectLabel $name)
+                    $allRoutes    = @(Get-Route -Object $it -ObjectLabel $name -MembershipCache $MembershipCache)
                     $hasLinkGroup = @($allRoutes | Where-Object { $_.Route -like 'Sharing link*' })
 
                     # 1. "What can this user do here?" - covers direct grants,
@@ -264,8 +298,9 @@ function Get-UserAccessDeep {
                     #    they actually have effective access.
                     if ($lvl -ne 'None') {
                         foreach ($r in ($allRoutes | Where-Object { $_.Route -notlike 'Sharing link*' })) {
-                            ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'Item' `
-                                    -ObjectTitle $name -ObjectUrl $ref -Level $lvl -Route $r -Meta $meta
+                            ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'Item' -ObjectKind $itemKind `
+                                    -ObjectTitle $name -ObjectUrl $ref -Level $lvl -Route $r -Meta $meta -ContainerCount $list.ItemCount `
+                                    -ListId $list.Id -ItemId $it.Id
                         }
                     }
 
@@ -275,8 +310,9 @@ function Get-UserAccessDeep {
                     #    for the extra call when a SharingLinks group is present.
                     if ($hasLinkGroup) {
                         foreach ($sl in (Resolve-SharingLinkAudience -FileRef $ref -UserUpn $userDisplay)) {
-                            ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'Item' `
-                                    -ObjectTitle $name -ObjectUrl $ref -Level $sl.Level -Route $sl.Route -Meta $meta
+                            ConvertTo-AccessRow -WebUrl $webUrl -WebTitle $webTitle -ObjectType 'Item' -ObjectKind $itemKind `
+                                    -ObjectTitle $name -ObjectUrl $ref -Level $sl.Level -Route $sl.Route -Meta $meta -ContainerCount $list.ItemCount `
+                                    -ListId $list.Id -ItemId $it.Id
                         }
                     }
                 }

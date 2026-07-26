@@ -56,8 +56,8 @@ Describe 'Claim + principal helpers' {
 Describe 'Export-UserAccessReport' {
     BeforeAll {
         $script:sample = @(
-            [pscustomobject]@{ User='jane@contoso.com'; SiteUrl='x'; SiteTitle='Finance'; EffectiveAccess='Read'; GrantedVia='Everyone claim (Everyone except external users)'; RouteType='Unexpected'; Permission='Read' }
-            [pscustomobject]@{ User='jane@contoso.com'; SiteUrl='y'; SiteTitle='Sales & Ops'; EffectiveAccess='Full Control'; GrantedVia="SharePoint group 'Sales Owners'"; RouteType='Expected'; Permission='Full Control' }
+            [pscustomobject]@{ User='jane@contoso.com'; SiteUrl='x'; SiteTitle='Finance'; EffectiveAccess='Read'; GrantedVia='Everyone claim (Everyone except external users)'; RouteType='Overshared'; Permission='Read' }
+            [pscustomobject]@{ User='jane@contoso.com'; SiteUrl='y'; SiteTitle='Sales & Ops'; EffectiveAccess='Full Control'; GrantedVia="SharePoint group 'Sales Owners'"; RouteType='Granted'; Permission='Full Control' }
         )
         $script:tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("uae_" + [System.IO.Path]::GetRandomFileName())
         New-Item -ItemType Directory -Path $script:tmp | Out-Null
@@ -69,14 +69,14 @@ Describe 'Export-UserAccessReport' {
         $script:sample | Export-UserAccessReport -Path $csv
         (Import-Csv $csv).Count | Should -Be 2
     }
-    It 'writes self-contained HTML with the Unexpected section first' {
+    It 'writes self-contained HTML with the Overshared section first' {
         $h = Join-Path $script:tmp 'r.html'
         $script:sample | Export-UserAccessReport -Path $h -Html
         $c = Get-Content $h -Raw
         $c | Should -Match '<!doctype html>'
         $c | Should -Not -Match 'src="http'
-        # Unexpected heading must appear before the Expected heading
-        $c.IndexOf('Unexpected access') | Should -BeLessThan $c.IndexOf('Expected access')
+        # Overshared heading must appear before the Granted heading
+        $c.IndexOf('Overshared access') | Should -BeLessThan $c.IndexOf('Granted access')
     }
     It 'HTML-encodes special characters (no injection)' {
         $h = Join-Path $script:tmp 'enc.html'
@@ -91,16 +91,19 @@ Describe 'Export-UserAccessReport' {
 }
 
 Describe 'Get-UserAccess' {
-    It 'filters to Unexpected with -UnexpectedOnly' {
+    It 'filters to Overshared with -OversharedOnly (and the -UnexpectedOnly alias)' {
         InModuleScope UserAccessExplorer {
             Mock Connect-IfNeeded {}
             Mock Get-UserAccessForSite {
-                [pscustomobject]@{ User='u'; SiteUrl='x'; SiteTitle='S'; EffectiveAccess='Read'; GrantedVia='Everyone claim (x)'; RouteType='Unexpected'; Permission='Read' }
-                [pscustomobject]@{ User='u'; SiteUrl='x'; SiteTitle='S'; EffectiveAccess='Read'; GrantedVia="group 'S Members'"; RouteType='Expected'; Permission='Read' }
+                [pscustomobject]@{ User='u'; SiteUrl='x'; SiteTitle='S'; EffectiveAccess='Read'; GrantedVia='Everyone claim (x)'; RouteType='Overshared'; Permission='Read' }
+                [pscustomobject]@{ User='u'; SiteUrl='x'; SiteTitle='S'; EffectiveAccess='Read'; GrantedVia="group 'S Members'"; RouteType='Granted'; Permission='Read' }
             }
-            $r = Get-UserAccess -User 'jane@contoso.com' -SiteUrl 'https://x/sites/S' -UseExistingConnection -UnexpectedOnly
+            $r = Get-UserAccess -User 'jane@contoso.com' -SiteUrl 'https://x/sites/S' -UseExistingConnection -OversharedOnly
             $r.Count | Should -Be 1
-            $r.RouteType | Should -Be 'Unexpected'
+            $r.RouteType | Should -Be 'Overshared'
+            # the old switch name still works
+            $r2 = Get-UserAccess -User 'jane@contoso.com' -SiteUrl 'https://x/sites/S' -UseExistingConnection -UnexpectedOnly
+            $r2.RouteType | Should -Be 'Overshared'
         }
     }
     It 'reports when the user has no access' {
@@ -141,7 +144,7 @@ Describe 'Sharing-link audience rules' {
         InModuleScope UserAccessExplorer {
             $v = Test-SharingLinkAudience -Link ([pscustomobject]@{ Scope='Organization'; Type='View' }) -UserUpn 'jane@contoso.com'
             $v | Should -Not -BeNullOrEmpty
-            $v.Route.Type | Should -Be 'Unexpected'
+            $v.Route.Type | Should -Be 'Overshared'
             $v.Route.Route | Should -Match 'anyone in the organisation'
         }
     }
@@ -191,6 +194,59 @@ Describe 'Sharing-link audience rules' {
             $v = Test-SharingLinkAudience -Link ([pscustomobject]@{ Scope='Organization'; Type='View' }) -UserUpn 'j@c.com'
             $v.Route.Route | Should -Match 'Organization'
             $v.Route.Route | Should -Not -Match 'Flexible'
+        }
+    }
+}
+
+Describe 'Group-membership confirmation' {
+    Context 'Get-GroupIdFromLogin' {
+        It 'pulls the guid from a security-group claim' {
+            InModuleScope UserAccessExplorer {
+                Get-GroupIdFromLogin 'c:0t.c|tenant|8a1c2f3e-4b5d-6e7f-8a9b-0c1d2e3f4a5b' |
+                    Should -Be '8a1c2f3e-4b5d-6e7f-8a9b-0c1d2e3f4a5b'
+            }
+        }
+        It 'pulls the guid from an M365 group owner claim (trailing _o)' {
+            InModuleScope UserAccessExplorer {
+                Get-GroupIdFromLogin 'c:0o.c|federateddirectoryclaimprovider|8a1c2f3e-4b5d-6e7f-8a9b-0c1d2e3f4a5b_o' |
+                    Should -Be '8a1c2f3e-4b5d-6e7f-8a9b-0c1d2e3f4a5b'
+            }
+        }
+        It 'returns null for an ordinary SharePoint group or empty login' {
+            InModuleScope UserAccessExplorer {
+                Get-GroupIdFromLogin 'Sales Owners' | Should -BeNullOrEmpty
+                Get-GroupIdFromLogin '' | Should -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Test-UserIsGroupMember' {
+        It 'returns true when Graph lists the group' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { [pscustomobject]@{ value = @('g1') } }
+                Test-UserIsGroupMember -UserUpn 'jane@contoso.com' -GroupId 'g1' | Should -BeTrue
+            }
+        }
+        It 'returns false when the group is not in the transitive list' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { [pscustomobject]@{ value = @('other') } }
+                Test-UserIsGroupMember -UserUpn 'jane@contoso.com' -GroupId 'g1' | Should -Be $false
+            }
+        }
+        It 'returns null (unknown) when Graph fails - so the caller keeps the route' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { throw 'Authorization_RequestDenied' }
+                Test-UserIsGroupMember -UserUpn 'jane@contoso.com' -GroupId 'g1' | Should -BeNullOrEmpty
+            }
+        }
+        It 'caches the answer - one Graph call per (user, group)' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { [pscustomobject]@{ value = @('g1') } }
+                $cache = @{}
+                Test-UserIsGroupMember -UserUpn 'jane@contoso.com' -GroupId 'g1' -Cache $cache | Out-Null
+                Test-UserIsGroupMember -UserUpn 'jane@contoso.com' -GroupId 'g1' -Cache $cache | Out-Null
+                Should -Invoke Invoke-PnPGraphMethod -Times 1 -Exactly
+            }
         }
     }
 }

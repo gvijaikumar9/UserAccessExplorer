@@ -1,6 +1,6 @@
 @{
     RootModule        = 'UserAccessExplorer.psm1'
-    ModuleVersion     = '0.1.0'
+    ModuleVersion     = '0.2.0'
     GUID              = 'e2c9a7d4-3f81-4b6a-9d02-7c5e1a4f8b93'
     Author            = 'G Vijai Kumar'
     CompanyName       = 'Five Number'
@@ -25,7 +25,7 @@
             Tags         = @('SharePoint','SharePointOnline','Microsoft365','PnP','Permissions','Security','Governance','Copilot','Oversharing','AccessReview')
             LicenseUri   = 'https://opensource.org/licenses/MIT'
             ProjectUri   = 'https://github.com/gvijaikumar9/UserAccessExplorer'
-            ReleaseNotes = 'First release. Get-UserAccess for named sites, grouping access as Expected vs Unexpected. Tenant-wide discovery is next.'
+            ReleaseNotes = 'v0.2.0. Terminology: the two access classes now use Microsoft''s own governance terms - Granted (was Expected) and Overshared (was Unexpected); -UnexpectedOnly still works as an alias for -OversharedOnly. Correctness: Entra/M365 group routes are confirmed against Graph (transitive checkMemberGroups) - confirmed non-members are dropped, unresolved ones keep an honest "membership unconfirmed" label. Rows carry PermUrl, a direct link to each object''s advanced-permissions page. GUI: deep (item-level) scanning, a Tree view of the Site > Library > Folder > Item hierarchy, precise object kinds, a Location breadcrumb, a per-row open-permissions button, scope-aware columns/tree, drag-to-resize columns, and a SharePoint site mark. Docs: required app permissions (Sites.FullControl.All, User.ReadBasic.All, GroupMember.Read.All) and a clearer search-failure message.'
         }
     }
 }

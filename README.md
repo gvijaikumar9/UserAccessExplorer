@@ -4,12 +4,28 @@
 
 Pick a user and User Access Explorer reports everything they can reach, **grouped by route** and classified:
 
-- **Expected** — access through a route they belong to: a direct grant, a SharePoint group they're a member of, or an Entra group.
-- **Unexpected** — access they were *never explicitly given*: an **Everyone / Everyone-except-external claim**, i.e. exactly the kind of oversharing Microsoft 365 Copilot will happily surface.
+- **Granted** — access through a route they belong to: a direct grant, a SharePoint group they're a member of, or an Entra group.
+- **Overshared** — access they were *never explicitly given*: an **Everyone / Everyone-except-external claim** or a **sharing link**, i.e. exactly the kind of oversharing Microsoft 365 Copilot will happily surface. ("Overshared" is Microsoft's own term for this in the Copilot / SharePoint Advanced Management governance reports.)
 
-Unexpected routes are surfaced **first**. That grouping is the whole point of the tool: *"what can this user see that they probably shouldn't — and why?"*
+Overshared routes are surfaced **first**. That grouping is the whole point of the tool: *"what can this user see that they probably shouldn't — and why?"*
 
 This is a **Copilot-readiness / oversharing review** tool for admins.
+
+---
+
+## Permissions the app needs
+
+Reading a site's permissions is an **admin** operation — a Contributor cannot see this. Register (or reuse) an Entra ID app and grant it:
+
+| Scope | Why | Type |
+|---|---|---|
+| **Sites.FullControl.All** (SharePoint) | read role assignments and broken inheritance on sites, lists and items | delegated or application |
+| **User.ReadBasic.All** (Microsoft Graph) | the User box's search-as-you-type directory lookup | delegated |
+| **GroupMember.Read.All** (Microsoft Graph) | confirm a user is really in an Entra/M365 group (transitively) before listing that route | delegated |
+
+Run it as a **SharePoint / Global Administrator**: permission reads need Full Control, and tenant-wide scans enumerate every site.
+
+> The two Graph scopes are optional-but-recommended. Without **User.ReadBasic.All**, user search fails — you can still type the full email (`jane@contoso.com`) and Scan. Without **GroupMember.Read.All**, group routes can't be confirmed and are shown as `Entra group '…' (membership unconfirmed)` rather than dropped/confirmed. The tool degrades gracefully in both cases.
 
 ---
 
@@ -73,7 +89,7 @@ Get-UserAccess -User jane@contoso.com -TenantWide `
 ```powershell
 Get-UserAccess -User jane@contoso.com -TenantWide `
     -TenantAdminUrl "https://contoso-admin.sharepoint.com" `
-    -ClientId $appId -Interactive -UnexpectedOnly
+    -ClientId $appId -Interactive -OversharedOnly
 ```
 
 **Go deep — subsites, lists, and individual files:**
@@ -82,7 +98,7 @@ Get-UserAccess -User jane@contoso.com -TenantWide `
 # All the way down, including documents Jane can open through a sharing link
 # she was never granted (invisible to a normal permission check)
 Get-UserAccess -User jane@contoso.com -SiteUrl $site -ClientId $appId -Interactive `
-    -Deep -IncludeItems -UnexpectedOnly
+    -Deep -IncludeItems -OversharedOnly
 ```
 
 `-Deep` walks subsites and any list/library with its own permissions; add
@@ -99,7 +115,7 @@ carries and whether the user falls inside the link's audience. Because each
 shared file is a separate Graph lookup, deep scans are slow — run them on sites
 you care about, not across a whole tenant.
 
-**Export a report** (self-contained HTML, Unexpected section first — or CSV):
+**Export a report** (self-contained HTML, Overshared section first — or CSV):
 
 ```powershell
 Get-UserAccess -User jane@contoso.com -TenantWide -TenantAdminUrl $admin -ClientId $appId -Interactive |
@@ -113,13 +129,14 @@ Get-UserAccess -User jane@contoso.com -TenantWide -TenantAdminUrl $admin -Client
 
 | Column | Meaning |
 |---|---|
-| `RouteType` | **Expected** or **Unexpected** |
+| `RouteType` | **Granted** or **Overshared** |
 | `SiteTitle` / `SiteUrl` | the site |
-| `GrantedVia` | the route — `Direct grant`, `SharePoint group '...'`, `Entra group '...'`, or `Everyone claim (...)` |
+| `GrantedVia` | the route — `Direct grant`, `SharePoint group '...'`, `Entra group '...'`, `Everyone claim (...)`, or `Sharing link (...)` |
 | `Permission` | what **this route** grants (e.g. `Read`, `Edit`) |
 | `EffectiveAccess` | the user's **overall** effective access on the site |
+| `PermUrl` | direct link to the object's **advanced-permissions page** — where the access is managed |
 
-With `-Deep`, rows also carry `ObjectType` (Web / List / Item), `ObjectTitle`, `ObjectUrl`, and a few default metadata columns (name, path, modified/created, author/editor, and size for library items).
+With `-Deep`, rows also carry `ObjectType` (Web / List / Item), `ObjectKind` (Site / Subsite / Library / List / Folder / File / Item), `ObjectTitle`, `ObjectUrl`, `PermUrl`, and a few default metadata columns (name, path, modified/created, author/editor, and size for library items).
 
 ---
 
@@ -133,15 +150,15 @@ pwsh -File .\gui\Show-UserAccessExplorer.ps1
 
 1. **Connect** — the settings popup (gear, top right) opens on launch. Enter your app **Client ID** and **Tenant admin URL** and click Connect (one interactive sign-in). The tenant chip turns green when connected.
 2. **Pick a user** — type a name or email in the **User** box; it searches the directory as you type. Pick a match.
-3. **Choose scope** — *Whole tenant*, or *One site* (the site box becomes a **searchable list of your tenant's sites** — pick one rather than typing a URL) — then **Scan**. A count-based progress bar shows "site N of M", and **Stop** cancels a running scan.
+3. **Choose scope** — *Whole tenant*, *One site*, or *One site (deep)* (the site box becomes a **searchable list of your tenant's sites** — pick one rather than typing a URL) — then **Scan**. A count-based progress bar shows "site N of M", and **Stop** cancels a running scan.
 
-Results are **grouped by site**, with the **Unexpected** ones sorted to the top and each grant path shown with its route (`Everyone claim → read`, `Sharing link → view`, and so on). Four tiles summarize the whole scan at a glance — Routes found, **Unexpected**, Sites reached, Highest access. Filter with the search box or the **Unexpected only** toggle, and **Export** to HTML or CSV.
+Results are **grouped by site**, with the **Overshared** ones sorted to the top and each grant path shown with its route (`Everyone claim → read`, `Sharing link → view`, and so on). Four tiles summarize the whole scan at a glance — Routes found, **Overshared**, Sites reached, Highest access. Filter with the search box, switch to the **Tree view** to see the Site → Library → Folder → Item hierarchy, and **Export** to HTML or CSV. Every object row (and tree node) has a **🔑 open-permissions button** that jumps straight to that object's advanced-permissions page in SharePoint.
 
 The scan runs on a background runspace so the window stays responsive on tenant-wide sweeps.
 
 > **Notes**
 > - WPF requires STA and PowerShell 7 is MTA by default, so the GUI runs itself inside a manually-created STA runspace. The engine is PS7-only, so it cannot fall back to Windows PowerShell 5.1.
-> - The window is site-level today; deep (item-level) scanning is available from the module (`-Deep`) and is coming to the GUI.
+> - The GUI does **deep** scanning too — pick *One site (deep)* to walk subsites, lists, folders, items and sharing links, and use the **Tree view** to see the structure.
 
 ---
 
@@ -151,7 +168,7 @@ For each site the engine:
 
 1. Calls `Web.GetUserEffectivePermissions` (CSOM) → the **definitive** answer to *can they, and at what level*. Sites where the level is `None` are skipped.
 2. Walks the site's **role assignments** to attribute that access to routes — direct grant, SharePoint group membership, Entra group, or an **Everyone claim** (detected from the principal's login/title).
-3. Classifies each route **Expected** vs **Unexpected** and emits one row per route.
+3. Classifies each route **Granted** vs **Overshared** and emits one row per route.
 
 Tenant-wide enumeration skips redirect stubs and the OneDrive/MySite host (not content sites). Every PnP call is wrapped in retry-with-backoff that honours `Retry-After` on throttling (429/503).
 
@@ -165,7 +182,7 @@ Tenant-wide enumeration skips redirect stubs and the OneDrive/MySite host (not c
 UserAccessExplorer.psd1 / .psm1     module manifest + loader
 Public/
   Get-UserAccess.ps1                main cmdlet (Site / Sites / Tenant param sets)
-  Export-UserAccessReport.ps1       HTML (Unexpected-first) / CSV export
+  Export-UserAccessReport.ps1       HTML (Overshared-first) / CSV export
 Private/
   Get-UserAccessForSite.ps1         the per-site engine
   Test-Principal.ps1                Everyone-claim / system-group detection, claim login

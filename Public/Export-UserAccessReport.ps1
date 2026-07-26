@@ -4,7 +4,7 @@ function Export-UserAccessReport {
         Write Get-UserAccess results to CSV or a standalone HTML report.
 
     .DESCRIPTION
-        The HTML report leads with the Unexpected access - the routes the user was
+        The HTML report leads with the Overshared access - the routes the user was
         never explicitly given - because that is the part someone actually needs to
         act on. Self-contained, so it opens anywhere and survives forwarding.
 
@@ -41,8 +41,8 @@ function Export-UserAccessReport {
         Add-Type -AssemblyName System.Web
 
         $user = $rows[0].User
-        $unexpected = @($rows | Where-Object RouteType -eq 'Unexpected')
-        $expected   = @($rows | Where-Object RouteType -eq 'Expected')
+        $overshared = @($rows | Where-Object RouteType -eq 'Overshared')
+        $granted    = @($rows | Where-Object RouteType -eq 'Granted')
 
         $enc = { param($s) [System.Web.HttpUtility]::HtmlEncode([string]$s) }
 
@@ -83,8 +83,8 @@ $([string]::Join("`n", $trs))
 </style></head><body>
 <h1>Access review</h1>
 <div class="meta">User <strong>$(& $enc $user)</strong> &middot; generated $generated &middot; $($rows.Count) route(s)</div>
-$(& $sectionHtml 'Unexpected access - never explicitly granted' '#b91c1c' $unexpected)
-$(& $sectionHtml 'Expected access - via membership or direct grant' '#4d7c0f' $expected)
+$(& $sectionHtml 'Overshared access - never explicitly granted' '#b91c1c' $overshared)
+$(& $sectionHtml 'Granted access - via membership or direct grant' '#4d7c0f' $granted)
 </body></html>
 "@
 

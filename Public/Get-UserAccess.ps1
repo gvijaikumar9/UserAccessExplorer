@@ -7,9 +7,9 @@ function Get-UserAccess {
     .DESCRIPTION
         For each site, this reports the user's effective access and attributes it
         to a route: a SharePoint group, a direct grant, or an Everyone claim. Each
-        route is classified Expected (they are a member / were granted it) or
-        Unexpected (an Everyone claim - access they were never explicitly given,
-        which is exactly what Copilot will surface).
+        route is classified Granted (they are a member / were given it) or
+        Overshared (an Everyone claim or sharing link - access they were never
+        explicitly given, which is exactly what Copilot will surface).
 
         This is an admin tool. Reading a site's permissions needs Full Control on
         that site - a Contributor cannot see this. Run it as a Site Owner / Site
@@ -26,9 +26,10 @@ function Get-UserAccess {
     .PARAMETER SiteUrls
         Several sites to check.
 
-    .PARAMETER UnexpectedOnly
-        Return only the Unexpected routes - the access the user was never
-        explicitly given.
+    .PARAMETER OversharedOnly
+        Return only the Overshared routes - the access the user was never
+        explicitly given (Everyone claims and sharing links).
+        The old name -UnexpectedOnly still works as an alias.
 
     .PARAMETER Deep
         Walk below the site: subsites, then lists and libraries that have their
@@ -63,7 +64,7 @@ function Get-UserAccess {
         Get-UserAccess -User jane@contoso.com -SiteUrl "https://contoso.sharepoint.com/sites/Sales" -ClientId $id -Interactive
 
     .EXAMPLE
-        Get-UserAccess -User jane@contoso.com -SiteUrls $sites -UseExistingConnection -UnexpectedOnly
+        Get-UserAccess -User jane@contoso.com -SiteUrls $sites -UseExistingConnection -OversharedOnly
 
     .EXAMPLE
         # Everything Jane can reach across the tenant, worst routes first
@@ -74,7 +75,7 @@ function Get-UserAccess {
         # All the way down - subsites, lists, and individual files - including
         # documents Jane can open through a sharing link she was never granted.
         Get-UserAccess -User jane@contoso.com -SiteUrl $site -ClientId $id -Interactive `
-            -Deep -IncludeItems -UnexpectedOnly
+            -Deep -IncludeItems -OversharedOnly
     #>
     [CmdletBinding(DefaultParameterSetName = 'Site')]
     param(
@@ -93,7 +94,8 @@ function Get-UserAccess {
         [Parameter(ParameterSetName = 'Tenant')]
         [string]   $TenantAdminUrl,
 
-        [switch]   $UnexpectedOnly,
+        [Alias('UnexpectedOnly')]
+        [switch]   $OversharedOnly,
 
         [switch]   $Deep,
         [switch]   $IncludeItems,
@@ -160,6 +162,10 @@ function Get-UserAccess {
     $n = 0
     $emitted = 0
 
+    # One membership cache for the whole run: a group seen on many sites/objects
+    # is resolved against Graph once, not repeatedly.
+    $membershipCache = @{}
+
     foreach ($site in $targets) {
         $n++
         Write-Progress -Activity "Checking $User's access" -Status "$n of $total : $site" `
@@ -171,13 +177,14 @@ function Get-UserAccess {
                 if ($Deep) {
                     Get-UserAccessDeep -SiteUrl $site -UserLogin $userLogin `
                         -ConnectSplat $connectSplat -IncludeItems:$IncludeItems `
-                        -MaxItemsPerList $MaxItemsPerList
+                        -MaxItemsPerList $MaxItemsPerList -MembershipCache $membershipCache
                 } else {
-                    Get-UserAccessForSite -SiteUrl $site -UserLogin $userLogin
+                    Get-UserAccessForSite -SiteUrl $site -UserLogin $userLogin `
+                        -MembershipCache $membershipCache
                 }
 
             $rows |
-                Where-Object { -not $UnexpectedOnly -or $_.RouteType -eq 'Unexpected' } |
+                Where-Object { -not $OversharedOnly -or $_.RouteType -eq 'Overshared' } |
                 ForEach-Object { $emitted++; $_ }
         }
         catch {
@@ -188,7 +195,7 @@ function Get-UserAccess {
     Write-Progress -Activity "Checking $User's access" -Completed
 
     if ($emitted -eq 0) {
-        $what = if ($UnexpectedOnly) { 'unexpected access' } else { 'access' }
+        $what = if ($OversharedOnly) { 'overshared access' } else { 'access' }
         Write-Information "$User has no $what on the $total site(s) checked." -InformationAction Continue
     }
 }
