@@ -52,13 +52,25 @@ Everything the tool does is **read-only**.
 
 ---
 
-## Install (module)
+## Install
+
+Clone the repo and import the module (no PowerShell Gallery dependency):
 
 ```powershell
-Install-Module UserAccessExplorer          # once published to the Gallery
-# or, from a clone:
-Import-Module .\UserAccessExplorer.psd1 -Force
+git clone https://github.com/gvijaikumar9/UserAccessExplorer.git
+cd UserAccessExplorer
+Import-Module .\UserAccessExplorer.psd1 -Force     # the Get-UserAccess / Export-UserAccessReport cmdlets
 ```
+
+To launch the desktop app instead:
+
+```powershell
+pwsh -File .\gui\Show-UserAccessExplorer.ps1        # or right-click > Run with PowerShell 7
+```
+
+Make sure **[PnP.PowerShell](https://pnp.github.io/powershell/) 2.12.0+** is installed (`Install-Module PnP.PowerShell`) — it's the module's one dependency.
+
+> Not on the PowerShell Gallery (yet) — installing from this repo is the supported path.
 
 ## Usage — module
 
