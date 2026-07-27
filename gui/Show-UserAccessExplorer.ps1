@@ -174,7 +174,7 @@ $guiScript = {
         <Setter.Value>
           <ControlTemplate TargetType="ComboBox">
             <Grid>
-              <ToggleButton x:Name="toggle" Focusable="False" ClickMode="Press"
+              <ToggleButton x:Name="toggle" Focusable="False" ClickMode="Press" Background="{TemplateBinding Background}"
                             IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                 <ToggleButton.Template>
                   <ControlTemplate TargetType="ToggleButton">
