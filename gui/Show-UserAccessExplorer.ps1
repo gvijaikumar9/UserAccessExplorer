@@ -102,6 +102,8 @@ $guiScript = {
     <SolidColorBrush x:Key="IconRed"      Color="#FBE3E6"/>
     <SolidColorBrush x:Key="IconGreen"    Color="#E7F3EC"/>
     <SolidColorBrush x:Key="IconPurple"   Color="#EFE9F5"/>
+    <SolidColorBrush x:Key="TileOversharedBg" Color="#FCE7EA"/>
+    <SolidColorBrush x:Key="TileDanger"       Color="#B10E1C"/>
 
     <Style x:Key="Glyph" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
@@ -1306,9 +1308,9 @@ $guiScript = {
         # tiles that should shout. Neutral text/background use the LIVE theme
         # brushes (from the resource dictionary) so they follow a dark/light swap;
         # red/green are semantic and read on both themes.
-        if ($u -gt 0) { $tileUnexpCard.Background = $riskBgU; $tileUnexp.Foreground = $brRed }
+        if ($u -gt 0) { $tileUnexpCard.Background = $window.Resources['TileOversharedBg']; $tileUnexp.Foreground = $window.Resources['TileDanger'] }
         else          { $tileUnexpCard.Background = $window.Resources['TileBg']; $tileUnexp.Foreground = $window.Resources['Ink'] }
-        $tileAccess.Foreground = if ($highest -eq 'Full Control') { $brRed } elseif ($highest -eq 'Edit') { $brSubtle } else { $window.Resources['Ink'] }
+        $tileAccess.Foreground = if ($highest -eq 'Full Control') { $window.Resources['TileDanger'] } elseif ($highest -eq 'Edit') { $brSubtle } else { $window.Resources['Ink'] }
     }
 
     # connection state (set on Connect; declared here so $loadSites can read it)
@@ -1479,18 +1481,18 @@ $guiScript = {
     $panelXaml = @'
 <Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Background="White" CornerRadius="8" BorderBrush="#D0D4D9" BorderThickness="1" Width="360" Margin="8">
+        Background="{DynamicResource Surface}" CornerRadius="8" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Width="360" Margin="8">
   <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2"/></Border.Effect>
   <StackPanel Margin="16">
-    <TextBlock Text="Connect to your tenant" FontWeight="SemiBold" FontSize="14" Foreground="#242424" Margin="0,0,0,10"/>
-    <TextBlock Text="Client ID" FontSize="12" Foreground="#707882" Margin="0,0,0,3"/>
-    <ComboBox x:Name="PClient" Height="34" IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" VerticalContentAlignment="Center"/>
-    <TextBlock Text="Tenant admin URL" FontSize="12" Foreground="#707882" Margin="0,10,0,3"/>
-    <ComboBox x:Name="PAdmin" Height="34" IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" VerticalContentAlignment="Center"/>
-    <Button x:Name="PConnect" Content="Connect" Height="34" Margin="0,14,0,0" Background="#0F6CBD" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
-    <TextBlock x:Name="PStatus" FontSize="11.5" Foreground="#707882" Margin="0,8,0,0" TextWrapping="Wrap"/>
+    <TextBlock Text="Connect to your tenant" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}" Margin="0,0,0,10"/>
+    <TextBlock Text="Client ID" FontSize="12" Foreground="{DynamicResource Subtle}" Margin="0,0,0,3"/>
+    <ComboBox x:Name="PClient" Height="36" IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" VerticalContentAlignment="Center"/>
+    <TextBlock Text="Tenant admin URL" FontSize="12" Foreground="{DynamicResource Subtle}" Margin="0,10,0,3"/>
+    <ComboBox x:Name="PAdmin" Height="36" IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" VerticalContentAlignment="Center"/>
+    <Button x:Name="PConnect" Content="Connect" Height="34" Margin="0,14,0,0" Background="{DynamicResource Accent}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+    <TextBlock x:Name="PStatus" FontSize="11.5" Foreground="{DynamicResource Subtle}" Margin="0,8,0,0" TextWrapping="Wrap"/>
     <TextBlock Margin="0,10,0,0" FontSize="11.5" TextWrapping="Wrap">
-      <Hyperlink x:Name="PRegister" Foreground="#0F6CBD">No app yet? Register one for this tenant</Hyperlink>
+      <Hyperlink x:Name="PRegister" Foreground="{DynamicResource Accent}">No app yet? Register one for this tenant</Hyperlink>
     </TextBlock>
   </StackPanel>
 </Border>
@@ -1501,6 +1503,14 @@ $guiScript = {
     $pClient = $panel.FindName('PClient'); $pAdmin = $panel.FindName('PAdmin')
     $pConnect = $panel.FindName('PConnect'); $pStatus = $panel.FindName('PStatus')
     $pRegister = $panel.FindName('PRegister')
+
+    # The popup is loaded as its OWN tree, so its DynamicResource refs can't see
+    # the window's brushes by default - share the window's resource dictionary so
+    # the popup themes (and follows a live dark/light swap), and give its two
+    # editable combos the themed template instead of the native white edit field.
+    $panel.Resources.MergedDictionaries.Add($window.Resources)
+    $pClient.Style = $window.Resources['FieldCombo']
+    $pAdmin.Style  = $window.Resources['FieldCombo']
 
     # fill the dropdowns with the remembered history; pre-select the most recent
     $saved = & $loadSettings
@@ -1556,10 +1566,12 @@ $guiScript = {
         $script:darkMode = [bool]$dark
         $pal = if ($dark) {
             @{ Canvas = '#17171A'; Surface = '#232327'; RailBg = '#1D1D21'; Ink = '#ECECEE'; Subtle = '#9AA0A6'; Line = '#35353B'; TileBg = '#2A2A30'; FieldBorder = '#45454C'
-               RowBg = '#232327'; SelBg = '#2C3A4D'; OversharedRow = '#3A2A2E'; IconBlue = '#1E2A3A'; IconRed = '#3A2429'; IconGreen = '#1F3328'; IconPurple = '#2C2440' }
+               RowBg = '#232327'; SelBg = '#2C3A4D'; OversharedRow = '#3A2A2E'; IconBlue = '#1E2A3A'; IconRed = '#3A2429'; IconGreen = '#1F3328'; IconPurple = '#2C2440'
+               TileOversharedBg = '#3A2429'; TileDanger = '#F19AA3' }
         } else {
             @{ Canvas = '#EEF0F3'; Surface = '#FFFFFF'; RailBg = '#F4F6F8'; Ink = '#242424'; Subtle = '#707882'; Line = '#E6E8EB'; TileBg = '#F7F8FA'; FieldBorder = '#C9CDD2'
-               RowBg = '#FFFFFF'; SelBg = '#E9F1FB'; OversharedRow = '#FDF3F2'; IconBlue = '#E7F0FB'; IconRed = '#FBE3E6'; IconGreen = '#E7F3EC'; IconPurple = '#EFE9F5' }
+               RowBg = '#FFFFFF'; SelBg = '#E9F1FB'; OversharedRow = '#FDF3F2'; IconBlue = '#E7F0FB'; IconRed = '#FBE3E6'; IconGreen = '#E7F3EC'; IconPurple = '#EFE9F5'
+               TileOversharedBg = '#FCE7EA'; TileDanger = '#B10E1C' }
         }
         foreach ($k in @($pal.Keys)) {
             $b = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($pal[$k]))
