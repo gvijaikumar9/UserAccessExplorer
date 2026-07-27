@@ -130,21 +130,16 @@ function Get-UserAccessDeep {
             [string]$Level, $Route, [hashtable]$Meta = @{}, [string]$ObjectKind = '', [int]$ContainerCount = -1,
             [string]$ListId = '', [int]$ItemId = -1
         )
-        # Deep-link to exactly where THIS access is managed, so the GUI can jump
-        # straight there:
-        #   sharing link     : the Manage Access / sharing dialog (sharedialog.aspx)
-        #                      - where the LINK is actually revoked, not the classic
-        #                      role-assignment page
-        #   item/file/folder : classic item permissions  obj={ListId},{ItemId},LISTITEM & List={ListId}
-        #   list/library     : classic list permissions   obj={ListId},doclib           & List={ListId}
+        # Deep-link to the classic advanced-permissions page for the object -
+        # verified live against the tenant on all levels:
+        #   item/file/folder : obj={ListId},{ItemId},LISTITEM & List={ListId}
+        #   list/library     : obj={ListId},doclib           & List={ListId}
         #   web/site/subsite : the site's own user.aspx
-        # The classic pages render even on modern sites and show the Grant / Remove
-        # actions; a sharing link is better killed from Manage Access.
-        $isLink = "$($Route.Route)" -like 'Sharing link*'
+        # For an item that carries a SHARING LINK this same page shows the link and
+        # a "manage links" action, so it doubles as the Manage-Access entry point -
+        # and unlike sharedialog.aspx it is guaranteed to render.
         $permUrl =
-            if ($isLink -and $ListId -and $ItemId -ge 0) {
-                "$WebUrl/_layouts/15/sharedialog.aspx?listId=$ListId&listItemId=$ItemId"
-            } elseif ($ListId -and $ItemId -ge 0) {
+            if ($ListId -and $ItemId -ge 0) {
                 "$WebUrl/_layouts/15/user.aspx?obj=$ListId%2C$ItemId%2CLISTITEM&List=$ListId"
             } elseif ($ListId) {
                 "$WebUrl/_layouts/15/user.aspx?obj=$ListId%2Cdoclib&List=$ListId"

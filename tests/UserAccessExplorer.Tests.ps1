@@ -82,7 +82,7 @@ Describe 'Export-UserAccessReport' {
         $deep = @(
             [pscustomobject]@{ User='u'; SiteUrl='s'; SiteTitle='Docs'; ObjectKind='File'; ObjectTitle='Secret.docx'
                 ObjectUrl='https://x/Shared Documents/Secret.docx'
-                PermUrl='https://x/_layouts/15/sharedialog.aspx?listId=g1&listItemId=3'
+                PermUrl='https://x/_layouts/15/user.aspx?obj=g1%2C3%2CLISTITEM&List=g1'
                 EffectiveAccess='Read'; GrantedVia='Sharing link - Organization / View'; RouteType='Overshared'; Permission='View' }
         )
         $h = Join-Path $script:tmp 'deep.html'
@@ -90,7 +90,7 @@ Describe 'Export-UserAccessReport' {
         $c = Get-Content $h -Raw
         $c | Should -Match 'File: Secret.docx'   # object column
         $c | Should -Match '>Manage<'            # permissions link
-        $c | Should -Match 'sharedialog.aspx'    # points at Manage Access
+        $c | Should -Match 'user\.aspx'          # points at the (proven) permissions page
     }
     It 'HTML-encodes special characters (no injection)' {
         $h = Join-Path $script:tmp 'enc.html'
