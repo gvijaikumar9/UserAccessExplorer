@@ -131,12 +131,75 @@ $guiScript = {
       </Setter>
     </Style>
 
+    <!-- themed dropdown item (only applied to the FieldCombo boxes, so the
+         still-light connect popup keeps its native items) -->
+    <Style x:Key="ComboItem" TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="Padding" Value="10,6,10,6"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="b" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource SelBg}"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- editable ComboBox, fully themed (the default template hardcodes a white
+         edit field that ignores Background - the dark-mode offender) -->
     <Style x:Key="FieldCombo" TargetType="ComboBox">
       <Setter Property="Height" Value="36"/>
       <Setter Property="Padding" Value="8,0,4,0"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="BorderBrush" Value="{DynamicResource FieldBorder}"/>
       <Setter Property="Background" Value="{DynamicResource Surface}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="ItemContainerStyle" Value="{StaticResource ComboItem}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton x:Name="toggle" Focusable="False" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border CornerRadius="6" Background="{TemplateBinding Background}"
+                            BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderThickness="1">
+                      <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="9"
+                                 Foreground="{DynamicResource Subtle}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    </Border>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter x:Name="cp" Margin="10,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                                Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+              <TextBox x:Name="PART_EditableTextBox" Margin="7,0,28,0" VerticalContentAlignment="Center" Visibility="Hidden"
+                       Background="Transparent" Foreground="{DynamicResource Ink}" CaretBrush="{DynamicResource Ink}" BorderThickness="0"/>
+              <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6"
+                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="320" Margin="0,2,0,0">
+                  <ScrollViewer><ItemsPresenter/></ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsEditable" Value="True">
+                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                <Setter TargetName="cp" Property="Visibility" Value="Collapsed"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="toggle" Property="Background" Value="#F2F3F5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
 
     <Style x:Key="Primary" TargetType="Button">
