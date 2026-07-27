@@ -104,6 +104,13 @@ $guiScript = {
     <SolidColorBrush x:Key="IconPurple"   Color="#EFE9F5"/>
     <SolidColorBrush x:Key="TileOversharedBg" Color="#FCE7EA"/>
     <SolidColorBrush x:Key="TileDanger"       Color="#B10E1C"/>
+    <SolidColorBrush x:Key="FieldDisabled"    Color="#F2F3F5"/>
+    <SolidColorBrush x:Key="BtnDisabledBg"    Color="#E4E6E9"/>
+    <SolidColorBrush x:Key="BtnDisabledFg"    Color="#A6ABB2"/>
+    <SolidColorBrush x:Key="OversharedPillBg" Color="#FCE7EA"/>
+    <SolidColorBrush x:Key="OversharedPillFg" Color="#B10E1C"/>
+    <SolidColorBrush x:Key="GrantedPillBg"    Color="#EAF1E7"/>
+    <SolidColorBrush x:Key="GrantedPillFg"    Color="#107C41"/>
 
     <Style x:Key="Glyph" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
@@ -126,7 +133,7 @@ $guiScript = {
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
-              <Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="#F2F3F5"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{DynamicResource FieldDisabled}"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -196,7 +203,7 @@ $guiScript = {
                 <Setter TargetName="cp" Property="Visibility" Value="Collapsed"/>
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
-                <Setter TargetName="toggle" Property="Background" Value="#F2F3F5"/>
+                <Setter TargetName="toggle" Property="Background" Value="{DynamicResource FieldDisabled}"/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -221,8 +228,8 @@ $guiScript = {
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource AccentHover}"/></Trigger>
               <Trigger Property="IsPressed"  Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource AccentPress}"/></Trigger>
               <Trigger Property="IsEnabled"  Value="False">
-                <Setter TargetName="b" Property="Background" Value="#E4E6E9"/>
-                <Setter Property="Foreground" Value="#A6ABB2"/>
+                <Setter TargetName="b" Property="Background" Value="{DynamicResource BtnDisabledBg}"/>
+                <Setter Property="Foreground" Value="{DynamicResource BtnDisabledFg}"/>
                 <Setter Property="Cursor" Value="Arrow"/>
               </Trigger>
             </ControlTemplate.Triggers>
@@ -247,8 +254,8 @@ $guiScript = {
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#F3F4F6"/></Trigger>
               <Trigger Property="IsEnabled"  Value="False">
-                <Setter Property="Foreground" Value="#B0B4BA"/>
-                <Setter TargetName="b" Property="BorderBrush" Value="#EAEBEE"/>
+                <Setter Property="Foreground" Value="{DynamicResource BtnDisabledFg}"/>
+                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Line}"/>
                 <Setter Property="Cursor" Value="Arrow"/>
               </Trigger>
             </ControlTemplate.Triggers>
@@ -490,10 +497,10 @@ $guiScript = {
           <TextBlock Text="What a user can reach, and how they got there" FontSize="12.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-          <Border x:Name="TenantChip" CornerRadius="12" Background="#EDEFF2" Padding="10,4,12,4" VerticalAlignment="Center">
+          <Border x:Name="TenantChip" CornerRadius="12" Background="{DynamicResource TileBg}" Padding="10,4,12,4" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal">
-              <TextBlock x:Name="TenantChipIcon" Style="{StaticResource Glyph}" Text="&#xE711;" FontSize="12" Foreground="#8A9099" Margin="0,0,6,0"/>
-              <TextBlock x:Name="TenantChipText" Text="Not connected" FontSize="12" Foreground="#5B6b7B" VerticalAlignment="Center"/>
+              <TextBlock x:Name="TenantChipIcon" Style="{StaticResource Glyph}" Text="&#xE711;" FontSize="12" Foreground="{DynamicResource Subtle}" Margin="0,0,6,0"/>
+              <TextBlock x:Name="TenantChipText" Text="Not connected" FontSize="12" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center"/>
             </StackPanel>
           </Border>
           <Button x:Name="SettingsButton" Style="{StaticResource IconButton}" Content="&#xE713;" Margin="8,0,0,0" ToolTip="Connection settings"/>
@@ -645,8 +652,8 @@ $guiScript = {
                                   <Style TargetType="Ellipse">
                                     <Setter Property="Fill" Value="#C4C9D0"/>
                                     <Style.Triggers>
-                                      <DataTrigger Binding="{Binding Name}" Value="Overshared"><Setter Property="Fill" Value="#B10E1C"/></DataTrigger>
-                                      <DataTrigger Binding="{Binding Name}" Value="Granted"><Setter Property="Fill" Value="#107C41"/></DataTrigger>
+                                      <DataTrigger Binding="{Binding Name}" Value="Overshared"><Setter Property="Fill" Value="{DynamicResource OversharedPillFg}"/></DataTrigger>
+                                      <DataTrigger Binding="{Binding Name}" Value="Granted"><Setter Property="Fill" Value="{DynamicResource GrantedPillFg}"/></DataTrigger>
                                     </Style.Triggers>
                                   </Style>
                                 </Ellipse.Style>
@@ -743,9 +750,25 @@ $guiScript = {
             <DataGridTemplateColumn Header="Risk" Width="120" SortMemberPath="RiskText">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate>
-                  <Border Background="{Binding RiskBg}" CornerRadius="10" Padding="9,3,9,3"
-                          HorizontalAlignment="Left" VerticalAlignment="Top">
-                    <TextBlock Text="{Binding RiskText}" Foreground="{Binding RiskFg}" FontSize="11.5" FontWeight="SemiBold"/>
+                  <Border CornerRadius="10" Padding="9,3,9,3" HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Border.Style>
+                      <Style TargetType="Border">
+                        <Setter Property="Background" Value="{DynamicResource GrantedPillBg}"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsUnexpected}" Value="True"><Setter Property="Background" Value="{DynamicResource OversharedPillBg}"/></DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding RiskText}" FontSize="11.5" FontWeight="SemiBold">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Foreground" Value="{DynamicResource GrantedPillFg}"/>
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsUnexpected}" Value="True"><Setter Property="Foreground" Value="{DynamicResource OversharedPillFg}"/></DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
                   </Border>
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
@@ -824,9 +847,25 @@ $guiScript = {
                 </TextBlock>
                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding CountLabel}" Foreground="#9AA0A6" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                <Border Background="{Binding RiskBg}" CornerRadius="9" Padding="7,1,7,1" Margin="10,0,0,0"
-                        VerticalAlignment="Center" Visibility="{Binding RiskVisibility}">
-                  <TextBlock Text="{Binding RiskText}" Foreground="{Binding RiskFg}" FontSize="10.5" FontWeight="SemiBold"/>
+                <Border CornerRadius="9" Padding="7,1,7,1" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="{Binding RiskVisibility}">
+                  <Border.Style>
+                    <Style TargetType="Border">
+                      <Setter Property="Background" Value="{DynamicResource GrantedPillBg}"/>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsUnexpected}" Value="True"><Setter Property="Background" Value="{DynamicResource OversharedPillBg}"/></DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </Border.Style>
+                  <TextBlock Text="{Binding RiskText}" FontSize="10.5" FontWeight="SemiBold">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource GrantedPillFg}"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsUnexpected}" Value="True"><Setter Property="Foreground" Value="{DynamicResource OversharedPillFg}"/></DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
                 </Border>
                 <TextBlock Text="{Binding GrantPath}" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 <TextBlock Text="{Binding Effective}" Foreground="#9AA0A6" VerticalAlignment="Center" Margin="10,0,0,0" FontStyle="Italic"/>
@@ -842,7 +881,7 @@ $guiScript = {
       </Grid>
 
       <!-- FOOTER -->
-      <Border Grid.Row="6" Background="#F7F8FA" CornerRadius="0,0,10,10" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="20,10,14,10">
+      <Border Grid.Row="6" Background="{DynamicResource TileBg}" CornerRadius="0,0,10,10" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="20,10,14,10">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -850,7 +889,7 @@ $guiScript = {
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <ProgressBar x:Name="Progress" Grid.Column="0" Width="150" Height="6" Minimum="0" Maximum="100"
-                       Visibility="Collapsed" VerticalAlignment="Center" Foreground="{StaticResource Accent}" Background="#E3E6EA" BorderThickness="0"/>
+                       Visibility="Collapsed" VerticalAlignment="Center" Foreground="{StaticResource Accent}" Background="{DynamicResource FieldBorder}" BorderThickness="0"/>
           <TextBlock x:Name="StatusText" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
                      Foreground="{DynamicResource Subtle}" Text="Open settings to connect."/>
           <Button x:Name="StopButton" Grid.Column="2" Style="{StaticResource Secondary}" Content="Stop" Width="80" Visibility="Collapsed"/>
@@ -893,7 +932,7 @@ $guiScript = {
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                       <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
                       <TextBlock Text="{Binding RouteCount, StringFormat='   &#xB7;   {0} routes'}" FontSize="12" Foreground="#9AA0A6"/>
-                      <TextBlock Text="{Binding OversharedCount, StringFormat=', {0} overshared'}" FontSize="12" Foreground="#B10E1C"/>
+                      <TextBlock Text="{Binding OversharedCount, StringFormat=', {0} overshared'}" FontSize="12" Foreground="{DynamicResource TileDanger}"/>
                     </StackPanel>
                   </StackPanel>
                 </DockPanel>
@@ -1567,11 +1606,15 @@ $guiScript = {
         $pal = if ($dark) {
             @{ Canvas = '#17171A'; Surface = '#232327'; RailBg = '#1D1D21'; Ink = '#ECECEE'; Subtle = '#9AA0A6'; Line = '#35353B'; TileBg = '#2A2A30'; FieldBorder = '#45454C'
                RowBg = '#232327'; SelBg = '#2C3A4D'; OversharedRow = '#3A2A2E'; IconBlue = '#1E2A3A'; IconRed = '#3A2429'; IconGreen = '#1F3328'; IconPurple = '#2C2440'
-               TileOversharedBg = '#3A2429'; TileDanger = '#F19AA3' }
+               TileOversharedBg = '#3A2429'; TileDanger = '#F19AA3'
+               FieldDisabled = '#2A2A30'; BtnDisabledBg = '#2E2E34'; BtnDisabledFg = '#6B6B73'
+               OversharedPillBg = '#3A2429'; OversharedPillFg = '#F19AA3'; GrantedPillBg = '#22331F'; GrantedPillFg = '#86CF95' }
         } else {
             @{ Canvas = '#EEF0F3'; Surface = '#FFFFFF'; RailBg = '#F4F6F8'; Ink = '#242424'; Subtle = '#707882'; Line = '#E6E8EB'; TileBg = '#F7F8FA'; FieldBorder = '#C9CDD2'
                RowBg = '#FFFFFF'; SelBg = '#E9F1FB'; OversharedRow = '#FDF3F2'; IconBlue = '#E7F0FB'; IconRed = '#FBE3E6'; IconGreen = '#E7F3EC'; IconPurple = '#EFE9F5'
-               TileOversharedBg = '#FCE7EA'; TileDanger = '#B10E1C' }
+               TileOversharedBg = '#FCE7EA'; TileDanger = '#B10E1C'
+               FieldDisabled = '#F2F3F5'; BtnDisabledBg = '#E4E6E9'; BtnDisabledFg = '#A6ABB2'
+               OversharedPillBg = '#FCE7EA'; OversharedPillFg = '#B10E1C'; GrantedPillBg = '#EAF1E7'; GrantedPillFg = '#107C41' }
         }
         foreach ($k in @($pal.Keys)) {
             $b = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($pal[$k]))
