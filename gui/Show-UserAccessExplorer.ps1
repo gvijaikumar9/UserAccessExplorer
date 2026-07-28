@@ -111,6 +111,8 @@ $guiScript = {
     <SolidColorBrush x:Key="OversharedPillFg" Color="#B10E1C"/>
     <SolidColorBrush x:Key="GrantedPillBg"    Color="#EAF1E7"/>
     <SolidColorBrush x:Key="GrantedPillFg"    Color="#107C41"/>
+    <SolidColorBrush x:Key="Hover"            Color="#EDEFF2"/>
+    <SolidColorBrush x:Key="NavActive"        Color="#E7F0FB"/>
 
     <Style x:Key="Glyph" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
@@ -252,7 +254,7 @@ $guiScript = {
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#F3F4F6"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
               <Trigger Property="IsEnabled"  Value="False">
                 <Setter Property="Foreground" Value="{DynamicResource BtnDisabledFg}"/>
                 <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Line}"/>
@@ -278,7 +280,7 @@ $guiScript = {
                          Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#EDEFF2"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -299,7 +301,7 @@ $guiScript = {
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#F3F4F6"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="b" Property="Background" Value="{StaticResource RiskBg}"/>
                 <Setter TargetName="b" Property="BorderBrush" Value="#F1B9C0"/>
@@ -337,7 +339,7 @@ $guiScript = {
               <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource Accent}"/>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#E7F0FB"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource NavActive}"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -366,9 +368,9 @@ $guiScript = {
               </StackPanel>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#E9ECEF"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="b" Property="Background" Value="#E7F0FB"/>
+                <Setter TargetName="b" Property="Background" Value="{DynamicResource NavActive}"/>
                 <Setter TargetName="ico" Property="Foreground" Value="{StaticResource Accent}"/>
                 <Setter Property="Foreground" Value="{StaticResource Accent}"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
@@ -397,7 +399,7 @@ $guiScript = {
               </StackPanel>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#E9ECEF"/></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -1708,13 +1710,15 @@ $guiScript = {
                RowBg = '#232327'; SelBg = '#2C3A4D'; OversharedRow = '#3A2A2E'; IconBlue = '#1E2A3A'; IconRed = '#3A2429'; IconGreen = '#1F3328'; IconPurple = '#2C2440'
                TileOversharedBg = '#3A2429'; TileDanger = '#F19AA3'
                FieldDisabled = '#2A2A30'; BtnDisabledBg = '#2E2E34'; BtnDisabledFg = '#6B6B73'
-               OversharedPillBg = '#3A2429'; OversharedPillFg = '#F19AA3'; GrantedPillBg = '#22331F'; GrantedPillFg = '#86CF95' }
+               OversharedPillBg = '#3A2429'; OversharedPillFg = '#F19AA3'; GrantedPillBg = '#22331F'; GrantedPillFg = '#86CF95'
+               Hover = '#2E2E34'; NavActive = '#263141' }
         } else {
             @{ Canvas = '#EEF0F3'; Surface = '#FFFFFF'; RailBg = '#F4F6F8'; Ink = '#242424'; Subtle = '#707882'; Line = '#E6E8EB'; TileBg = '#F7F8FA'; FieldBorder = '#C9CDD2'
                RowBg = '#FFFFFF'; SelBg = '#E9F1FB'; OversharedRow = '#FDF3F2'; IconBlue = '#E7F0FB'; IconRed = '#FBE3E6'; IconGreen = '#E7F3EC'; IconPurple = '#EFE9F5'
                TileOversharedBg = '#FCE7EA'; TileDanger = '#B10E1C'
                FieldDisabled = '#F2F3F5'; BtnDisabledBg = '#E4E6E9'; BtnDisabledFg = '#A6ABB2'
-               OversharedPillBg = '#FCE7EA'; OversharedPillFg = '#B10E1C'; GrantedPillBg = '#EAF1E7'; GrantedPillFg = '#107C41' }
+               OversharedPillBg = '#FCE7EA'; OversharedPillFg = '#B10E1C'; GrantedPillBg = '#EAF1E7'; GrantedPillFg = '#107C41'
+               Hover = '#EDEFF2'; NavActive = '#E7F0FB' }
         }
         foreach ($k in @($pal.Keys)) {
             $b = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($pal[$k]))
