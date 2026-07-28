@@ -929,7 +929,7 @@ $guiScript = {
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="{Binding UserDisplay}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
                       <TextBlock Text="  &#xB7;  " Foreground="{DynamicResource Subtle}"/>
-                      <TextBlock Text="{Binding ScopeLabel}" Foreground="{DynamicResource Subtle}"/>
+                      <TextBlock Text="{Binding ScopeDisplay}" Foreground="{DynamicResource Subtle}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                       <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
@@ -978,7 +978,7 @@ $guiScript = {
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="{Binding UserDisplay}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
                       <TextBlock Text="  &#xB7;  " Foreground="{DynamicResource Subtle}"/>
-                      <TextBlock Text="{Binding ScopeLabel}" Foreground="{DynamicResource Subtle}"/>
+                      <TextBlock Text="{Binding ScopeDisplay}" Foreground="{DynamicResource Subtle}"/>
                       <Border Background="{DynamicResource IconBlue}" CornerRadius="4" Padding="6,1,6,1" Margin="8,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Format}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Accent}"/>
                       </Border>
@@ -1472,6 +1472,15 @@ $guiScript = {
             & $pruneScans
         } catch { Write-Verbose "save scan skipped: $($_.Exception.Message)" }
     }
+    # Human "which site" label for a scan/report: tenant scans stay "Whole tenant";
+    # site scans show the site name (from /sites/<x> or /teams/<x>) + a (deep) tag.
+    $scopeDisplayFor = {
+        param($ScopeLabel, $Target)
+        if ("$ScopeLabel" -eq 'Whole tenant') { return 'Whole tenant' }
+        $site = if ("$Target" -match '/(sites|teams)/([^/?#]+)') { $matches[2] } else { "$Target" -replace '^https?://', '' -replace '/.*$', '' }
+        if (-not $site) { return "$ScopeLabel" }   # older records saved before Target was stored
+        if ("$ScopeLabel" -like '*deep*') { "$site (deep)" } else { "$site" }
+    }
     $listScans = {
         if (-not (Test-Path $script:scansDir)) { return @() }
         @(Get-ChildItem $script:scansDir -Filter *.json -ErrorAction SilentlyContinue |
@@ -1479,8 +1488,9 @@ $guiScript = {
                 try {
                     $j = Get-Content $_.FullName -Raw | ConvertFrom-Json
                     $w = try { ([datetime]$j.Timestamp).ToString('MMM d, yyyy  HH:mm') } catch { "$($j.Timestamp)" }
-                    $j | Add-Member -NotePropertyName When  -NotePropertyValue $w           -Force
-                    $j | Add-Member -NotePropertyName _Path -NotePropertyValue $_.FullName  -Force
+                    $j | Add-Member -NotePropertyName When         -NotePropertyValue $w                                    -Force
+                    $j | Add-Member -NotePropertyName ScopeDisplay -NotePropertyValue (& $scopeDisplayFor $j.ScopeLabel $j.Target) -Force
+                    $j | Add-Member -NotePropertyName _Path        -NotePropertyValue $_.FullName                           -Force
                     $j
                 } catch { Write-Verbose "skipped unreadable scan file: $($_.Exception.Message)" }
             })
@@ -1524,7 +1534,7 @@ $guiScript = {
     # re-open them reliably even if the user saved the original elsewhere.
     $script:reportsDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'UserAccessExplorer\reports'
     $saveReport = {
-        param($SourcePath, $User, $UserDisplay, $ScopeLabel, $Format, $RouteCount)
+        param($SourcePath, $User, $UserDisplay, $ScopeLabel, $Target, $Format, $RouteCount)
         try {
             if (-not (Test-Path $script:reportsDir)) { New-Item -ItemType Directory -Path $script:reportsDir -Force | Out-Null }
             $ext  = [System.IO.Path]::GetExtension($SourcePath)
@@ -1532,7 +1542,7 @@ $guiScript = {
             $dest = Join-Path $script:reportsDir "$base$ext"
             Copy-Item -Path $SourcePath -Destination $dest -Force
             [pscustomobject]@{
-                User = "$User"; UserDisplay = "$UserDisplay"; ScopeLabel = "$ScopeLabel"; Format = "$Format"
+                User = "$User"; UserDisplay = "$UserDisplay"; ScopeLabel = "$ScopeLabel"; Target = "$Target"; Format = "$Format"
                 RouteCount = [int]$RouteCount; Timestamp = (Get-Date).ToString('o'); File = "$dest"; OriginalPath = "$SourcePath"
             } | ConvertTo-Json | Set-Content -Path (Join-Path $script:reportsDir "$base.meta.json") -Encoding UTF8
             $metas = @(Get-ChildItem $script:reportsDir -Filter *.meta.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
@@ -1551,8 +1561,9 @@ $guiScript = {
                 try {
                     $j = Get-Content $_.FullName -Raw | ConvertFrom-Json
                     $w = try { ([datetime]$j.Timestamp).ToString('MMM d, yyyy  HH:mm') } catch { "$($j.Timestamp)" }
-                    $j | Add-Member -NotePropertyName When      -NotePropertyValue $w          -Force
-                    $j | Add-Member -NotePropertyName _MetaPath -NotePropertyValue $_.FullName -Force
+                    $j | Add-Member -NotePropertyName When         -NotePropertyValue $w                                    -Force
+                    $j | Add-Member -NotePropertyName ScopeDisplay -NotePropertyValue (& $scopeDisplayFor $j.ScopeLabel $j.Target) -Force
+                    $j | Add-Member -NotePropertyName _MetaPath    -NotePropertyValue $_.FullName                           -Force
                     $j
                 } catch { Write-Verbose "skipped unreadable report meta: $($_.Exception.Message)" }
             })
@@ -1881,7 +1892,7 @@ $guiScript = {
                 if ($fmt -eq 'CSV') { $flat | Export-UserAccessReport -Path $dlg.FileName | Out-Null }
                 else { $flat | Export-UserAccessReport -Path $dlg.FileName -Html | Out-Null }
                 # keep a managed copy so it shows in the Reports view
-                & $saveReport $dlg.FileName $script:lastUser $script:lastUserDisplay $script:lastScopeLabel $fmt $flat.Count
+                & $saveReport $dlg.FileName $script:lastUser $script:lastUserDisplay $script:lastScopeLabel $script:lastTarget $fmt $flat.Count
                 $status.Text = "Report saved to $($dlg.FileName) - also in Reports"
             } catch { $status.Text = "Export failed: $($_.Exception.Message)" }
         }
