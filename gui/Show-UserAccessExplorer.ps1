@@ -465,6 +465,24 @@ $guiScript = {
         <StackPanel DockPanel.Dock="Bottom">
           <Border Height="1" Background="{DynamicResource Line}" Margin="0,0,0,10"/>
           <Button x:Name="ThemeToggle" Style="{StaticResource NavItemBtn}" Content="Dark mode" Tag="&#xE708;"/>
+          <Button x:Name="VersionButton" Cursor="Hand" Margin="0,2,0,0" HorizontalAlignment="Left" ToolTip="About &#38; check for updates">
+            <Button.Template>
+              <ControlTemplate TargetType="Button">
+                <Border x:Name="vb" Background="Transparent" CornerRadius="8" Padding="12,6,12,6">
+                  <ContentPresenter/>
+                </Border>
+                <ControlTemplate.Triggers>
+                  <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="vb" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
+                </ControlTemplate.Triggers>
+              </ControlTemplate>
+            </Button.Template>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock x:Name="VersionText" Text="v0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center"/>
+              <Border x:Name="UpdateBadge" Background="{DynamicResource Accent}" CornerRadius="7" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
+                <TextBlock Text="Update" FontSize="10" FontWeight="SemiBold" Foreground="White"/>
+              </Border>
+            </StackPanel>
+          </Button>
         </StackPanel>
         <StackPanel DockPanel.Dock="Top">
           <TextBlock Text="DISCOVER" FontSize="10.5" FontWeight="SemiBold" Foreground="#9AA0A6" Margin="12,0,0,6"/>
@@ -1023,6 +1041,10 @@ $guiScript = {
     $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
     $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $themeToggle = & $get 'ThemeToggle'
+    $versionButton = & $get 'VersionButton'; $versionText = & $get 'VersionText'; $updateBadge = & $get 'UpdateBadge'
+    $script:appVersion = try { "$((Import-PowerShellDataFile $ModulePath).ModuleVersion)" } catch { '0.0.0' }
+    $script:repo = 'gvijaikumar9/UserAccessExplorer'
+    $versionText.Text = "v$($script:appVersion)"
     $navReports = & $get 'NavReports'; $reportsView = & $get 'ReportsView'; $reportsList = & $get 'ReportsList'; $reportsEmpty = & $get 'ReportsEmpty'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
     $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
@@ -1654,6 +1676,116 @@ $guiScript = {
     $pClient.Style = $window.Resources['FieldCombo']
     $pAdmin.Style  = $window.Resources['FieldCombo']
 
+    # --- About panel + version / update check --------------------------------
+    $aboutPopup = New-Object System.Windows.Controls.Primitives.Popup
+    $aboutPopup.PlacementTarget = $versionButton
+    $aboutPopup.Placement = 'Top'; $aboutPopup.StaysOpen = $false; $aboutPopup.AllowsTransparency = $true
+    $aboutXaml = @'
+<Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource Surface}" CornerRadius="8" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Width="300" Margin="8">
+  <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2"/></Border.Effect>
+  <StackPanel Margin="16">
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+      <Image Source="{DynamicResource SharePointLogo}" Width="22" Height="22" Margin="0,0,8,0" VerticalAlignment="Center"/>
+      <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
+    </StackPanel>
+    <TextBlock x:Name="AboutVersion" Text="Version" FontSize="12" Foreground="{DynamicResource Subtle}"/>
+    <TextBlock x:Name="AboutStatus" Text="" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="{DynamicResource Subtle}"/>
+    <Button x:Name="AboutDownload" Content="Download update" Height="34" Margin="0,12,0,0" Background="{DynamicResource Accent}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Visibility="Collapsed"/>
+    <Button x:Name="AboutCheck" Content="Check for updates" Height="34" Margin="0,8,0,0" Cursor="Hand"/>
+    <TextBlock Margin="0,12,0,0" FontSize="11.5">
+      <Hyperlink x:Name="AboutRepo" Foreground="{DynamicResource Accent}">View on GitHub</Hyperlink>
+    </TextBlock>
+  </StackPanel>
+</Border>
+'@
+    $aboutPanel = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader ([xml]$aboutXaml)))
+    $aboutPopup.Child = $aboutPanel
+    $aboutPanel.Resources.MergedDictionaries.Add($window.Resources)
+    $aboutVersion = $aboutPanel.FindName('AboutVersion'); $aboutStatus = $aboutPanel.FindName('AboutStatus')
+    $aboutCheck = $aboutPanel.FindName('AboutCheck'); $aboutDownload = $aboutPanel.FindName('AboutDownload'); $aboutRepo = $aboutPanel.FindName('AboutRepo')
+    $aboutCheck.Style = $window.Resources['Secondary']
+    $aboutVersion.Text = "Version $($script:appVersion)"
+
+    # persist last-check time + result in a small file (so the badge survives a
+    # restart without re-hitting the API, and we can throttle to once/day)
+    $script:updateStatePath = Join-Path (Split-Path $script:settingsPath -Parent) 'update.json'
+    $loadUpdateState = { try { if (Test-Path $script:updateStatePath) { return Get-Content $script:updateStatePath -Raw | ConvertFrom-Json } } catch { Write-Verbose "update state load skipped: $($_.Exception.Message)" } return $null }
+    $saveUpdateState = {
+        param($res)
+        try {
+            $dir = Split-Path $script:updateStatePath -Parent
+            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+            [pscustomobject]@{ LastCheck = (Get-Date).ToString('o'); Latest = $(if ($res) { "$($res.Latest)" }); Url = $(if ($res) { "$($res.Url)" }); Newer = $(if ($res) { [bool]$res.Newer } else { $false }) } |
+                ConvertTo-Json | Set-Content -Path $script:updateStatePath -Encoding UTF8
+        } catch { Write-Verbose "update state save skipped: $($_.Exception.Message)" }
+    }
+
+    $script:updateUrl = $null; $script:updChecking = $false
+    # push a check result onto the UI (footer badge + About status)
+    $applyUpdateResult = {
+        param($res, $manual)
+        if (-not $res -or -not $res.Latest) {
+            if ($manual) { $aboutStatus.Text = "Couldn't check right now - you may be offline, blocked, or no release is published yet."; $aboutStatus.Foreground = $window.Resources['Subtle'] }
+            return
+        }
+        if ($res.Newer) {
+            $script:updateUrl = "$($res.Url)"
+            $updateBadge.Visibility = 'Visible'
+            $aboutDownload.Visibility = 'Visible'
+            $aboutStatus.Text = "Update available: v$($res.Latest)"
+            $aboutStatus.Foreground = $window.Resources['Accent']
+        } else {
+            $updateBadge.Visibility = 'Collapsed'
+            $aboutDownload.Visibility = 'Collapsed'
+            $aboutStatus.Text = "You're on the latest version."
+            $aboutStatus.Foreground = $window.Resources['Subtle']
+        }
+    }
+
+    # the actual check runs in a background runspace (non-blocking, fail-silent);
+    # GitHub Releases API needs a User-Agent header or it 403s.
+    $script:UpdateBlock = {
+        param($CurrentVersion, $Repo)
+        try {
+            $r = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ 'User-Agent' = 'UserAccessExplorer'; 'Accept' = 'application/vnd.github+json' } -TimeoutSec 6
+            $tag = "$($r.tag_name)" -replace '^[vV]', ''
+            $newer = $false; try { $newer = ([version]$tag -gt [version]$CurrentVersion) } catch { $newer = $false }
+            [pscustomobject]@{ Latest = $tag; Newer = $newer; Url = "$($r.html_url)" }
+        } catch { [pscustomobject]@{ Latest = $null; Newer = $false; Url = $null } }
+    }
+    $runUpdateCheck = {
+        param($manual)
+        if ($script:updChecking) { return }
+        $script:updChecking = $true
+        if ($manual) { $aboutStatus.Text = 'Checking for updates...'; $aboutStatus.Foreground = $window.Resources['Subtle'] }
+        $script:updManual = [bool]$manual
+        $script:updRs = [runspacefactory]::CreateRunspace(); $script:updRs.Open()
+        $script:updPs = [powershell]::Create(); $script:updPs.Runspace = $script:updRs
+        [void]$script:updPs.AddScript($script:UpdateBlock).AddArgument($script:appVersion).AddArgument($script:repo)
+        $script:updOut = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
+        $script:updHandle = $script:updPs.BeginInvoke($script:updOut, $script:updOut)
+        $script:updTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:updTimer.Interval = [TimeSpan]::FromMilliseconds(400)
+        $script:updTimer.Add_Tick({
+            if (-not $script:updHandle.IsCompleted) { return }
+            $script:updTimer.Stop()
+            try { $null = $script:updPs.EndInvoke($script:updHandle) } catch { Write-Verbose "$_" }
+            $res = @($script:updOut)[0]
+            $script:updPs.Dispose(); $script:updRs.Dispose()
+            $script:updChecking = $false
+            & $applyUpdateResult $res $script:updManual
+            & $saveUpdateState $res
+        })
+        $script:updTimer.Start()
+    }
+
+    $versionButton.Add_Click({ $aboutPopup.IsOpen = -not $aboutPopup.IsOpen })
+    $aboutCheck.Add_Click({ & $runUpdateCheck $true })
+    $aboutDownload.Add_Click({ if ($script:updateUrl) { try { Start-Process $script:updateUrl } catch { Write-Verbose "$_" } } })
+    $aboutRepo.Add_Click({ try { Start-Process "https://github.com/$($script:repo)" } catch { Write-Verbose "$_" } })
+
     # fill the dropdowns with the remembered history; pre-select the most recent
     $saved = & $loadSettings
     if ($saved) {
@@ -2003,6 +2135,14 @@ $guiScript = {
     # restore the saved theme before the window paints
     $startSaved = & $loadSettings
     if ($startSaved -and ($startSaved.PSObject.Properties.Name -contains 'Theme') -and $startSaved.Theme) { & $applyTheme $true }
+
+    # show any cached "update available" badge immediately, then refresh in the
+    # background if the last check was > 24h ago (throttled, non-blocking, silent).
+    $us = & $loadUpdateState
+    if ($us) { & $applyUpdateResult ([pscustomobject]@{ Latest = $us.Latest; Newer = $us.Newer; Url = $us.Url }) $false }
+    $stale = $true
+    if ($us -and $us.LastCheck) { try { $stale = ((Get-Date) - [datetime]$us.LastCheck).TotalHours -ge 24 } catch { $stale = $true } }
+    if ($stale) { & $runUpdateCheck $false }
 
     $window.Add_Loaded({ $popup.IsOpen = $true })
     $null = $window.ShowDialog()
