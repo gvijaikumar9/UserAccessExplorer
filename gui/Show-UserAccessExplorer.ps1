@@ -506,7 +506,6 @@ $guiScript = {
             </StackPanel>
           </Border>
           <Button x:Name="SettingsButton" Style="{StaticResource IconButton}" Content="&#xE713;" Margin="8,0,0,0" ToolTip="Connection settings"/>
-          <Button x:Name="OverflowButton" Style="{StaticResource IconButton}" Content="&#xE712;" ToolTip="More"/>
         </StackPanel>
       </Grid>
 
@@ -1015,7 +1014,7 @@ $guiScript = {
     $scopeCombo  = & $get 'ScopeCombo';   $scanBtn   = & $get 'ScanButton'
     $siteRow     = & $get 'SiteRow';      $siteCombo = & $get 'SiteCombo';  $sitePlace = & $get 'SitePlaceholder'
     $tenantChip  = & $get 'TenantChip';   $chipText  = & $get 'TenantChipText'; $chipIcon = & $get 'TenantChipIcon'
-    $settingsBtn = & $get 'SettingsButton'; $overflowBtn = & $get 'OverflowButton'
+    $settingsBtn = & $get 'SettingsButton'
     $tileRoutes  = & $get 'TileRoutes';   $tileUnexp = & $get 'TileUnexpected'; $tileUnexpCard = & $get 'TileUnexpectedCard'
     $tileSites   = & $get 'TileSites';    $tileAccess = & $get 'TileAccess'
     $filterBox   = & $get 'FilterBox';    $filterPlace = & $get 'FilterPlaceholder'
@@ -1520,16 +1519,6 @@ $guiScript = {
     }
     # Shared (non-closure) click handler for Recent-menu items - the item's Tag
     # carries the parsed scan object, or the '__clear__' sentinel.
-    $onRecentClick = {
-        $t = $this.Tag
-        if ("$t" -eq '__clear__') {
-            try { Get-ChildItem $script:scansDir -Filter *.json -ErrorAction SilentlyContinue | Remove-Item -Force } catch { Write-Verbose "clear scans skipped: $($_.Exception.Message)" }
-            $status.Text = 'Saved scans cleared.'
-            return
-        }
-        & $loadScan $t
-    }
-
     # --- saved reports -------------------------------------------------------
     # A "report" is the exported HTML/CSV document (distinct from a saved scan,
     # which is reloadable row data). On export we ALSO keep a managed copy under
@@ -1675,30 +1664,6 @@ $guiScript = {
     }
 
     $settingsBtn.Add_Click({ $popup.IsOpen = -not $popup.IsOpen })
-    # Overflow (...) opens the Recent-scans menu: reload any past scan instantly.
-    $overflowBtn.Add_Click({
-        $menu = New-Object System.Windows.Controls.ContextMenu
-        $scans = @(& $listScans)
-        if ($scans.Count -eq 0) {
-            $mi = New-Object System.Windows.Controls.MenuItem; $mi.Header = 'No saved scans yet'; $mi.IsEnabled = $false
-            [void]$menu.Items.Add($mi)
-        } else {
-            $hdr = New-Object System.Windows.Controls.MenuItem; $hdr.Header = 'Recent scans (reload instantly)'; $hdr.IsEnabled = $false; $hdr.FontWeight = 'Bold'
-            [void]$menu.Items.Add($hdr)
-            foreach ($s in $scans) {
-                $when = try { ([datetime]$s.Timestamp).ToString('MMM d, HH:mm') } catch { "$($s.Timestamp)" }
-                $mi = New-Object System.Windows.Controls.MenuItem
-                $mi.Header = "$($s.UserDisplay)   -   $($s.ScopeLabel)   -   $when    ($($s.RouteCount) routes, $($s.OversharedCount) overshared)"
-                $mi.Tag = $s
-                $mi.Add_Click($onRecentClick)
-                [void]$menu.Items.Add($mi)
-            }
-            [void]$menu.Items.Add((New-Object System.Windows.Controls.Separator))
-            $clr = New-Object System.Windows.Controls.MenuItem; $clr.Header = 'Clear saved scans'; $clr.Tag = '__clear__'; $clr.Add_Click($onRecentClick)
-            [void]$menu.Items.Add($clr)
-        }
-        $menu.PlacementTarget = $overflowBtn; $menu.Placement = 'Bottom'; $menu.IsOpen = $true
-    })
 
     # --- left-rail navigation -------------------------------------------------
     $refreshSaved = {
