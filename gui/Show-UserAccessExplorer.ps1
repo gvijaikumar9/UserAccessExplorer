@@ -1744,9 +1744,16 @@ $guiScript = {
         param($res, $manual)
         if (-not $res -or -not $res.Latest) {
             if ($manual) {
-                $aboutStatusIcon.Text = [char]0xE946; $aboutStatusIcon.Foreground = $window.Resources['Subtle']
-                $aboutStatus.Text = "Couldn't check right now - you may be offline, blocked, or no release is published yet."
-                $aboutStatus.Foreground = $window.Resources['Subtle']
+                if ("$($res.Status)" -eq 'norelease') {
+                    # reached GitHub fine, there just aren't any releases yet
+                    $aboutStatusIcon.Text = [char]0xE73E; $aboutStatusIcon.Foreground = $window.Resources['GrantedPillFg']
+                    $aboutStatus.Text = "You're on the current version (no releases published yet)."
+                    $aboutStatus.Foreground = $window.Resources['Subtle']
+                } else {
+                    $aboutStatusIcon.Text = [char]0xE946; $aboutStatusIcon.Foreground = $window.Resources['Subtle']
+                    $aboutStatus.Text = "Couldn't reach GitHub - you may be offline or behind a firewall."
+                    $aboutStatus.Foreground = $window.Resources['Subtle']
+                }
             }
             return
         }
@@ -1774,8 +1781,13 @@ $guiScript = {
             $r = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ 'User-Agent' = 'UserAccessExplorer'; 'Accept' = 'application/vnd.github+json' } -TimeoutSec 6
             $tag = "$($r.tag_name)" -replace '^[vV]', ''
             $newer = $false; try { $newer = ([version]$tag -gt [version]$CurrentVersion) } catch { $newer = $false }
-            [pscustomobject]@{ Latest = $tag; Newer = $newer; Url = "$($r.html_url)" }
-        } catch { [pscustomobject]@{ Latest = $null; Newer = $false; Url = $null } }
+            [pscustomobject]@{ Latest = $tag; Newer = $newer; Url = "$($r.html_url)"; Status = 'ok' }
+        } catch {
+            # 404 = the repo simply has no releases yet (not a failure) - the user
+            # is on the current version. Anything else = a real network/firewall issue.
+            $code = $null; try { $code = [int]$_.Exception.Response.StatusCode } catch { $code = $null }
+            [pscustomobject]@{ Latest = $null; Newer = $false; Url = $null; Status = $(if ($code -eq 404) { 'norelease' } else { 'error' }) }
+        }
     }
     $runUpdateCheck = {
         param($manual)
