@@ -477,6 +477,7 @@ $guiScript = {
               </ControlTemplate>
             </Button.Template>
             <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,7,0"/>
               <TextBlock x:Name="VersionText" Text="v0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center"/>
               <Border x:Name="UpdateBadge" Background="{DynamicResource Accent}" CornerRadius="7" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
                 <TextBlock Text="Update" FontSize="10" FontWeight="SemiBold" Foreground="White"/>
@@ -1686,28 +1687,38 @@ $guiScript = {
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Background="{DynamicResource Surface}" CornerRadius="8" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Width="300" Margin="8">
   <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2"/></Border.Effect>
-  <StackPanel Margin="16">
-    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-      <Image Source="{DynamicResource SharePointLogo}" Width="22" Height="22" Margin="0,0,8,0" VerticalAlignment="Center"/>
-      <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
+  <StackPanel Margin="18">
+    <StackPanel Orientation="Horizontal">
+      <Image Source="{DynamicResource SharePointLogo}" Width="36" Height="36" VerticalAlignment="Center" Margin="0,0,12,0"/>
+      <StackPanel VerticalAlignment="Center">
+        <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14.5" Foreground="{DynamicResource Ink}"/>
+        <TextBlock x:Name="AboutVersion" Text="Version 0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
+      </StackPanel>
     </StackPanel>
-    <TextBlock x:Name="AboutVersion" Text="Version" FontSize="12" Foreground="{DynamicResource Subtle}"/>
-    <TextBlock x:Name="AboutStatus" Text="" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="{DynamicResource Subtle}"/>
-    <Button x:Name="AboutDownload" Content="Download update" Height="34" Margin="0,12,0,0" Background="{DynamicResource Accent}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Visibility="Collapsed"/>
-    <Button x:Name="AboutCheck" Content="Check for updates" Height="34" Margin="0,8,0,0" Cursor="Hand"/>
-    <TextBlock Margin="0,12,0,0" FontSize="11.5">
-      <Hyperlink x:Name="AboutGuide" Foreground="{DynamicResource Accent}">Guide &#38; how-to (fivenumber.com)</Hyperlink>
-    </TextBlock>
-    <TextBlock Margin="0,4,0,0" FontSize="11.5">
-      <Hyperlink x:Name="AboutRepo" Foreground="{DynamicResource Accent}">View on GitHub</Hyperlink>
-    </TextBlock>
+    <TextBlock Text="See what a user can reach across SharePoint &#8211; and where it's overshared." FontSize="11.5" Foreground="{DynamicResource Subtle}" TextWrapping="Wrap" Margin="0,12,0,0"/>
+    <Border Height="1" Background="{DynamicResource Line}" Margin="0,14,0,0"/>
+    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+      <TextBlock x:Name="AboutStatusIcon" Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{DynamicResource Subtle}" VerticalAlignment="Top" Margin="0,1,8,0"/>
+      <TextBlock x:Name="AboutStatus" Text="Check for the latest version." FontSize="12" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="222"/>
+    </StackPanel>
+    <Button x:Name="AboutDownload" Content="Download update" Height="34" Margin="0,14,0,0" Background="{DynamicResource Accent}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Visibility="Collapsed"/>
+    <Button x:Name="AboutCheck" Content="Check for updates" Height="34" Margin="0,10,0,0" Cursor="Hand"/>
+    <Border Height="1" Background="{DynamicResource Line}" Margin="0,16,0,0"/>
+    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+      <TextBlock Text="&#xE82D;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+      <TextBlock FontSize="11.5" VerticalAlignment="Center"><Hyperlink x:Name="AboutGuide" Foreground="{DynamicResource Accent}" TextDecorations="None">Guide &#38; how-to (fivenumber.com)</Hyperlink></TextBlock>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+      <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+      <TextBlock FontSize="11.5" VerticalAlignment="Center"><Hyperlink x:Name="AboutRepo" Foreground="{DynamicResource Accent}" TextDecorations="None">View on GitHub</Hyperlink></TextBlock>
+    </StackPanel>
   </StackPanel>
 </Border>
 '@
     $aboutPanel = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader ([xml]$aboutXaml)))
     $aboutPopup.Child = $aboutPanel
     $aboutPanel.Resources.MergedDictionaries.Add($window.Resources)
-    $aboutVersion = $aboutPanel.FindName('AboutVersion'); $aboutStatus = $aboutPanel.FindName('AboutStatus')
+    $aboutVersion = $aboutPanel.FindName('AboutVersion'); $aboutStatus = $aboutPanel.FindName('AboutStatus'); $aboutStatusIcon = $aboutPanel.FindName('AboutStatusIcon')
     $aboutCheck = $aboutPanel.FindName('AboutCheck'); $aboutDownload = $aboutPanel.FindName('AboutDownload')
     $aboutRepo = $aboutPanel.FindName('AboutRepo'); $aboutGuide = $aboutPanel.FindName('AboutGuide')
     $aboutCheck.Style = $window.Resources['Secondary']
@@ -1732,18 +1743,24 @@ $guiScript = {
     $applyUpdateResult = {
         param($res, $manual)
         if (-not $res -or -not $res.Latest) {
-            if ($manual) { $aboutStatus.Text = "Couldn't check right now - you may be offline, blocked, or no release is published yet."; $aboutStatus.Foreground = $window.Resources['Subtle'] }
+            if ($manual) {
+                $aboutStatusIcon.Text = [char]0xE946; $aboutStatusIcon.Foreground = $window.Resources['Subtle']
+                $aboutStatus.Text = "Couldn't check right now - you may be offline, blocked, or no release is published yet."
+                $aboutStatus.Foreground = $window.Resources['Subtle']
+            }
             return
         }
         if ($res.Newer) {
             $script:updateUrl = "$($res.Url)"
             $updateBadge.Visibility = 'Visible'
             $aboutDownload.Visibility = 'Visible'
+            $aboutStatusIcon.Text = [char]0xE7BA; $aboutStatusIcon.Foreground = $window.Resources['Accent']
             $aboutStatus.Text = "Update available: v$($res.Latest)"
             $aboutStatus.Foreground = $window.Resources['Accent']
         } else {
             $updateBadge.Visibility = 'Collapsed'
             $aboutDownload.Visibility = 'Collapsed'
+            $aboutStatusIcon.Text = [char]0xE73E; $aboutStatusIcon.Foreground = $window.Resources['GrantedPillFg']
             $aboutStatus.Text = "You're on the latest version."
             $aboutStatus.Foreground = $window.Resources['Subtle']
         }
@@ -1764,7 +1781,7 @@ $guiScript = {
         param($manual)
         if ($script:updChecking) { return }
         $script:updChecking = $true
-        if ($manual) { $aboutStatus.Text = 'Checking for updates...'; $aboutStatus.Foreground = $window.Resources['Subtle'] }
+        if ($manual) { $aboutStatusIcon.Text = [char]0xE895; $aboutStatusIcon.Foreground = $window.Resources['Subtle']; $aboutStatus.Text = 'Checking for updates...'; $aboutStatus.Foreground = $window.Resources['Subtle'] }
         $script:updManual = [bool]$manual
         $script:updRs = [runspacefactory]::CreateRunspace(); $script:updRs.Open()
         $script:updPs = [powershell]::Create(); $script:updPs.Runspace = $script:updRs
