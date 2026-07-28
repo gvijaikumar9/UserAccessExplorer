@@ -1618,13 +1618,14 @@ $guiScript = {
         $script:groupField = if ($script:isCompare) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
         $script:lastMode = "$($Scan.Mode)"
         if ($script:lastMode -eq 'Deep') {
-            $viewToggle.Visibility = 'Visible'; $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
+            $viewToggle.Visibility = if ($script:isCompare) { 'Collapsed' } else { 'Visible' }   # tree has no compare view
+            $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
         } else {
             $viewToggle.Visibility = 'Collapsed'; $colObject.Visibility = 'Collapsed'; $colLocation.Visibility = 'Collapsed'
         }
         $script:allRows = & $buildRows $script:rows
         & $refreshTiles $script:rows
-        $viewToggle.IsChecked = ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0)
+        $viewToggle.IsChecked = ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0 -and -not $script:isCompare)
         & $applyView
         & $showView
         $exportBtn.IsEnabled = $script:rows.Count -gt 0
@@ -2233,7 +2234,8 @@ $guiScript = {
         # group by the comparison bucket in compare mode; clear it when leaving compare
         $script:groupField = if ($userB) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
         if ($mode -eq 'Deep') {
-            $viewToggle.Visibility = 'Visible'
+            # the tree can't express a comparison, so hide it in compare mode
+            $viewToggle.Visibility = if ($userB) { 'Collapsed' } else { 'Visible' }
             $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
         } else {
             $viewToggle.Visibility = 'Collapsed'
@@ -2283,7 +2285,8 @@ $guiScript = {
                 & $refreshTiles $script:rows
                 & $applyView
                 # deep results land in the tree; flip to it now that rows are in
-                if ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0) { $viewToggle.IsChecked = $true }
+                # (but a compare stays in the grid - the tree has no comparison view)
+                if ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0 -and -not $script:isCompare) { $viewToggle.IsChecked = $true }
                 & $showView
                 $progress.Visibility = 'Collapsed'; $stopBtn.Visibility = 'Collapsed'
                 $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
