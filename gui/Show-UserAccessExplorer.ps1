@@ -1044,6 +1044,7 @@ $guiScript = {
     $versionButton = & $get 'VersionButton'; $versionText = & $get 'VersionText'; $updateBadge = & $get 'UpdateBadge'
     $script:appVersion = try { "$((Import-PowerShellDataFile $ModulePath).ModuleVersion)" } catch { '0.0.0' }
     $script:repo = 'gvijaikumar9/UserAccessExplorer'
+    $script:guideUrl = 'https://fivenumber.com/user-access-explorer/'   # author's guide / write-up
     $versionText.Text = "v$($script:appVersion)"
     $navReports = & $get 'NavReports'; $reportsView = & $get 'ReportsView'; $reportsList = & $get 'ReportsList'; $reportsEmpty = & $get 'ReportsEmpty'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
@@ -1695,6 +1696,9 @@ $guiScript = {
     <Button x:Name="AboutDownload" Content="Download update" Height="34" Margin="0,12,0,0" Background="{DynamicResource Accent}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Visibility="Collapsed"/>
     <Button x:Name="AboutCheck" Content="Check for updates" Height="34" Margin="0,8,0,0" Cursor="Hand"/>
     <TextBlock Margin="0,12,0,0" FontSize="11.5">
+      <Hyperlink x:Name="AboutGuide" Foreground="{DynamicResource Accent}">Guide &#38; how-to (fivenumber.com)</Hyperlink>
+    </TextBlock>
+    <TextBlock Margin="0,4,0,0" FontSize="11.5">
       <Hyperlink x:Name="AboutRepo" Foreground="{DynamicResource Accent}">View on GitHub</Hyperlink>
     </TextBlock>
   </StackPanel>
@@ -1704,7 +1708,8 @@ $guiScript = {
     $aboutPopup.Child = $aboutPanel
     $aboutPanel.Resources.MergedDictionaries.Add($window.Resources)
     $aboutVersion = $aboutPanel.FindName('AboutVersion'); $aboutStatus = $aboutPanel.FindName('AboutStatus')
-    $aboutCheck = $aboutPanel.FindName('AboutCheck'); $aboutDownload = $aboutPanel.FindName('AboutDownload'); $aboutRepo = $aboutPanel.FindName('AboutRepo')
+    $aboutCheck = $aboutPanel.FindName('AboutCheck'); $aboutDownload = $aboutPanel.FindName('AboutDownload')
+    $aboutRepo = $aboutPanel.FindName('AboutRepo'); $aboutGuide = $aboutPanel.FindName('AboutGuide')
     $aboutCheck.Style = $window.Resources['Secondary']
     $aboutVersion.Text = "Version $($script:appVersion)"
 
@@ -1785,6 +1790,7 @@ $guiScript = {
     $aboutCheck.Add_Click({ & $runUpdateCheck $true })
     $aboutDownload.Add_Click({ if ($script:updateUrl) { try { Start-Process $script:updateUrl } catch { Write-Verbose "$_" } } })
     $aboutRepo.Add_Click({ try { Start-Process "https://github.com/$($script:repo)" } catch { Write-Verbose "$_" } })
+    $aboutGuide.Add_Click({ try { Start-Process $script:guideUrl } catch { Write-Verbose "$_" } })
 
     # fill the dropdowns with the remembered history; pre-select the most recent
     $saved = & $loadSettings
