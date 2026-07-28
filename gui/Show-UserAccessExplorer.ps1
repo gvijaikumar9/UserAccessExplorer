@@ -465,7 +465,6 @@ $guiScript = {
         <StackPanel DockPanel.Dock="Bottom">
           <Border Height="1" Background="{DynamicResource Line}" Margin="0,0,0,10"/>
           <Button x:Name="ThemeToggle" Style="{StaticResource NavItemBtn}" Content="Dark mode" Tag="&#xE708;"/>
-          <Button x:Name="NavSettings" Style="{StaticResource NavItemBtn}" Content="Settings" Tag="&#xE713;"/>
         </StackPanel>
         <StackPanel DockPanel.Dock="Top">
           <TextBlock Text="DISCOVER" FontSize="10.5" FontWeight="SemiBold" Foreground="#9AA0A6" Margin="12,0,0,6"/>
@@ -1024,7 +1023,7 @@ $guiScript = {
     $viewToggle = & $get 'ViewToggle'; $resultsTree = & $get 'ResultsTree'; $scopeNote = & $get 'ScopeNote'
     $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
-    $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $navSettings = & $get 'NavSettings'; $themeToggle = & $get 'ThemeToggle'
+    $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $themeToggle = & $get 'ThemeToggle'
     $navReports = & $get 'NavReports'; $reportsView = & $get 'ReportsView'; $reportsList = & $get 'ReportsList'; $reportsEmpty = & $get 'ReportsEmpty'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
     $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
@@ -1696,10 +1695,6 @@ $guiScript = {
     $navScan.Add_Checked({ $scanView.Visibility = 'Visible'; $savedView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
     $navSaved.Add_Checked({ & $refreshSaved; $savedView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
     $navReports.Add_Checked({ & $refreshReports; $reportsView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $savedView.Visibility = 'Collapsed' })
-    # Anchor the connect popup to the top-right gear from BOTH entry points (the
-    # rail Settings item and the gear itself), so it always opens in the same
-    # place - by the connection chip - instead of jumping to the bottom-left rail.
-    $navSettings.Add_Click({ $popup.PlacementTarget = $settingsBtn; $popup.Placement = 'Bottom'; $popup.IsOpen = $true })
 
     # --- light / dark theme ---------------------------------------------------
     # Themeable brushes are DynamicResource; swapping the resource values repaints
