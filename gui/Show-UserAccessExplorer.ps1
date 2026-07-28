@@ -1565,7 +1565,7 @@ $guiScript = {
         } catch { Write-Verbose "prune scans skipped: $($_.Exception.Message)" }
     }
     $saveScan = {
-        param($User, $UserDisplay, $Mode, $ScopeLabel, $Target, $Rows)
+        param($User, $UserDisplay, $Mode, $ScopeLabel, $Target, $Rows, $IsCompare, $CmpA, $CmpB)
         try {
             # [object[]] cast, NOT @(): @() around a generic List[object] throws
             # "Argument types do not match" in PS 7.6.3 - this silently killed every
@@ -1573,11 +1573,12 @@ $guiScript = {
             $arr = [object[]]$Rows
             [pscustomobject]@{
                 User = "$User"; UserDisplay = "$UserDisplay"; Mode = "$Mode"; ScopeLabel = "$ScopeLabel"; Target = "$Target"
+                IsCompare = [bool]$IsCompare; CmpUserA = "$CmpA"; CmpUserB = "$CmpB"
                 Timestamp = (Get-Date).ToString('o')
                 RouteCount = $arr.Count
                 OversharedCount = @($arr | Where-Object { $_.RouteType -eq 'Overshared' }).Count
                 Rows = $arr
-            } | ConvertTo-Json -Depth 6 | Set-Content -Path (& $scanFileFor "$User|$Mode|$Target") -Encoding UTF8
+            } | ConvertTo-Json -Depth 6 | Set-Content -Path (& $scanFileFor "$User|$Mode|$Target|$CmpB") -Encoding UTF8
             & $pruneScans
         } catch { Write-Verbose "save scan skipped: $($_.Exception.Message)" }
     }
@@ -1609,7 +1610,12 @@ $guiScript = {
         param($Scan)
         $script:rows = New-Object System.Collections.Generic.List[object]
         foreach ($r in @($Scan.Rows)) { $script:rows.Add($r) }
-        $script:isCompare = $false; $colWho.Visibility = 'Collapsed'   # saved scans reload as single-user
+        # restore compare state (older saved scans have no IsCompare field)
+        $script:isCompare = if ($Scan.PSObject.Properties.Name -contains 'IsCompare') { [bool]$Scan.IsCompare } else { $false }
+        $script:cmpUserA = if ($Scan.PSObject.Properties.Name -contains 'CmpUserA') { "$($Scan.CmpUserA)" } else { '' }
+        $script:cmpUserB = if ($Scan.PSObject.Properties.Name -contains 'CmpUserB') { "$($Scan.CmpUserB)" } else { '' }
+        $colWho.Visibility = if ($script:isCompare) { 'Visible' } else { 'Collapsed' }
+        $script:groupField = if ($script:isCompare) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
         $script:lastMode = "$($Scan.Mode)"
         if ($script:lastMode -eq 'Deep') {
             $viewToggle.Visibility = 'Visible'; $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
@@ -2283,9 +2289,11 @@ $guiScript = {
                 $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
 
                 # persist the completed scan so it can be reloaded instantly later
-                # (compare runs aren't saved - reload has no compare view yet)
-                if (-not $script:cancelled -and $script:rows.Count -gt 0 -and -not $script:isCompare) {
-                    & $saveScan $script:lastUser $script:lastUserDisplay $script:lastMode $script:lastScopeLabel $script:lastTarget $script:rows
+                if (-not $script:cancelled -and $script:rows.Count -gt 0) {
+                    $saveDisplay = if ($script:isCompare) {
+                        ("$($script:cmpUserA)" -split ' - ')[0] + '  vs  ' + ("$($script:cmpUserB)" -split ' - ')[0]
+                    } else { $script:lastUserDisplay }
+                    & $saveScan $script:lastUser $saveDisplay $script:lastMode $script:lastScopeLabel $script:lastTarget $script:rows $script:isCompare $script:cmpUserA $script:cmpUserB
                 }
 
                 $u = @($script:rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
