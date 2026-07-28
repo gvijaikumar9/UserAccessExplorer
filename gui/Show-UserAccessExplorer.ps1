@@ -949,6 +949,15 @@ $guiScript = {
                       <TextBlock Text="  &#xB7;  " Foreground="{DynamicResource Subtle}"/>
                       <TextBlock Text="{Binding ScopeDisplay}" Foreground="{DynamicResource Subtle}"/>
                     </StackPanel>
+                    <TextBlock Text="{Binding TargetUrl}" FontSize="11" Foreground="#9AA0A6" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" ToolTip="{Binding Target}">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding TargetUrl}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                       <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
                       <TextBlock Text="{Binding RouteCount, StringFormat='   &#xB7;   {0} routes'}" FontSize="12" Foreground="#9AA0A6"/>
@@ -1001,6 +1010,15 @@ $guiScript = {
                         <TextBlock Text="{Binding Format}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Accent}"/>
                       </Border>
                     </StackPanel>
+                    <TextBlock Text="{Binding TargetUrl}" FontSize="11" Foreground="#9AA0A6" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" ToolTip="{Binding Target}">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding TargetUrl}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                       <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
                       <TextBlock Text="{Binding RouteCount, StringFormat='   &#xB7;   {0} routes'}" FontSize="12" Foreground="#9AA0A6"/>
@@ -1516,6 +1534,7 @@ $guiScript = {
                     $w = try { ([datetime]$j.Timestamp).ToString('MMM d, yyyy  HH:mm') } catch { "$($j.Timestamp)" }
                     $j | Add-Member -NotePropertyName When         -NotePropertyValue $w                                    -Force
                     $j | Add-Member -NotePropertyName ScopeDisplay -NotePropertyValue (& $scopeDisplayFor $j.ScopeLabel $j.Target) -Force
+                    $j | Add-Member -NotePropertyName TargetUrl    -NotePropertyValue $(if ("$($j.ScopeLabel)" -eq 'Whole tenant') { 'All sites in the tenant' } elseif ("$($j.Target)") { "$($j.Target)" } else { '' }) -Force
                     $j | Add-Member -NotePropertyName _Path        -NotePropertyValue $_.FullName                           -Force
                     $j
                 } catch { Write-Verbose "skipped unreadable scan file: $($_.Exception.Message)" }
@@ -1579,6 +1598,7 @@ $guiScript = {
                     $w = try { ([datetime]$j.Timestamp).ToString('MMM d, yyyy  HH:mm') } catch { "$($j.Timestamp)" }
                     $j | Add-Member -NotePropertyName When         -NotePropertyValue $w                                    -Force
                     $j | Add-Member -NotePropertyName ScopeDisplay -NotePropertyValue (& $scopeDisplayFor $j.ScopeLabel $j.Target) -Force
+                    $j | Add-Member -NotePropertyName TargetUrl    -NotePropertyValue $(if ("$($j.ScopeLabel)" -eq 'Whole tenant') { 'All sites in the tenant' } elseif ("$($j.Target)") { "$($j.Target)" } else { '' }) -Force
                     $j | Add-Member -NotePropertyName _MetaPath    -NotePropertyValue $_.FullName                           -Force
                     $j
                 } catch { Write-Verbose "skipped unreadable report meta: $($_.Exception.Message)" }
