@@ -469,7 +469,7 @@ $guiScript = {
         <StackPanel DockPanel.Dock="Top">
           <TextBlock Text="DISCOVER" FontSize="10.5" FontWeight="SemiBold" Foreground="#9AA0A6" Margin="12,0,0,6"/>
           <RadioButton x:Name="NavScan"  Style="{StaticResource NavItem}" Content="Scan"        Tag="&#xE721;" IsChecked="True"/>
-          <RadioButton x:Name="NavSaved" Style="{StaticResource NavItem}" Content="Saved scans" Tag="&#xE81C;"/>
+          <RadioButton x:Name="NavSaved" Style="{StaticResource NavItem}" Content="Scan history" Tag="&#xE81C;"/>
           <RadioButton x:Name="NavReports" Style="{StaticResource NavItem}" Content="Reports" Tag="&#xE8A5;"/>
         </StackPanel>
       </DockPanel>
@@ -909,7 +909,7 @@ $guiScript = {
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="20,16,20,12">
-        <TextBlock Text="Saved scans" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+        <TextBlock Text="Scan history" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
         <TextBlock Text="Reload a past scan instantly - Scan always re-runs live" FontSize="12.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
       </StackPanel>
       <Border Grid.Row="0" Height="1" Background="{DynamicResource Line}" VerticalAlignment="Bottom"/>
@@ -945,7 +945,7 @@ $guiScript = {
       </ScrollViewer>
 
       <TextBlock x:Name="SavedEmpty" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                 Foreground="#9AA0A6" FontSize="14" Text="No saved scans yet - run a scan and it will appear here."/>
+                 Foreground="#9AA0A6" FontSize="14" Text="No scans yet - run a scan and it will appear here."/>
     </Grid>
   </Border>
 
