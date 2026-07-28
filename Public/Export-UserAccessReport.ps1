@@ -58,7 +58,7 @@ function Export-UserAccessReport {
                 }
                 $permCell = ''
                 if (($r.PSObject.Properties.Name -contains 'PermUrl') -and $r.PermUrl) {
-                    $permCell = "<a href=""$(& $enc $r.PermUrl)"">Manage</a>"
+                    $permCell = "<a href=""$(& $enc $r.PermUrl)"" target=""_blank"" rel=""noopener"">Manage</a>"
                 }
 @"
 <tr>
