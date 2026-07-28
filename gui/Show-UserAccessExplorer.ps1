@@ -1696,7 +1696,10 @@ $guiScript = {
     $navScan.Add_Checked({ $scanView.Visibility = 'Visible'; $savedView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
     $navSaved.Add_Checked({ & $refreshSaved; $savedView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
     $navReports.Add_Checked({ & $refreshReports; $reportsView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $savedView.Visibility = 'Collapsed' })
-    $navSettings.Add_Click({ $popup.PlacementTarget = $navSettings; $popup.IsOpen = $true })
+    # Anchor the connect popup to the top-right gear from BOTH entry points (the
+    # rail Settings item and the gear itself), so it always opens in the same
+    # place - by the connection chip - instead of jumping to the bottom-left rail.
+    $navSettings.Add_Click({ $popup.PlacementTarget = $settingsBtn; $popup.Placement = 'Bottom'; $popup.IsOpen = $true })
 
     # --- light / dark theme ---------------------------------------------------
     # Themeable brushes are DynamicResource; swapping the resource values repaints
