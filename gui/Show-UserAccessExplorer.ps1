@@ -611,7 +611,7 @@ $guiScript = {
             <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconBlue}" VerticalAlignment="Center" Margin="0,0,12,0">
               <TextBlock Style="{StaticResource Glyph}" Text="&#xE71B;" FontSize="17" Foreground="#4C9DF0" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
-            <StackPanel VerticalAlignment="Center"><TextBlock Text="Routes found" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileRoutes" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
+            <StackPanel VerticalAlignment="Center"><TextBlock x:Name="TileRoutesLabel" Text="Routes found" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileRoutes" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
         <Border x:Name="TileUnexpectedCard" Background="{DynamicResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
@@ -619,7 +619,7 @@ $guiScript = {
             <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconRed}" VerticalAlignment="Center" Margin="0,0,12,0">
               <TextBlock Style="{StaticResource Glyph}" Text="&#xE7BA;" FontSize="17" Foreground="#E85D6B" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
-            <StackPanel VerticalAlignment="Center"><TextBlock Text="Overshared" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileUnexpected" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
+            <StackPanel VerticalAlignment="Center"><TextBlock x:Name="TileUnexpLabel" Text="Overshared" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileUnexpected" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
         <Border Background="{DynamicResource TileBg}" CornerRadius="8" Margin="6,0,6,0" Padding="14,10,14,10">
@@ -627,7 +627,7 @@ $guiScript = {
             <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconGreen}" VerticalAlignment="Center" Margin="0,0,12,0">
               <TextBlock Style="{StaticResource Glyph}" Text="&#xE73E;" FontSize="17" Foreground="#2F9E5E" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
-            <StackPanel VerticalAlignment="Center"><TextBlock Text="Sites reached" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileSites" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
+            <StackPanel VerticalAlignment="Center"><TextBlock x:Name="TileSitesLabel" Text="Sites reached" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileSites" Text="0" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
         <Border Background="{DynamicResource TileBg}" CornerRadius="8" Margin="6,0,0,0" Padding="14,10,14,10">
@@ -635,7 +635,7 @@ $guiScript = {
             <Border Width="38" Height="38" CornerRadius="8" Background="{DynamicResource IconPurple}" VerticalAlignment="Center" Margin="0,0,12,0">
               <TextBlock Style="{StaticResource Glyph}" Text="&#xE72E;" FontSize="17" Foreground="#9B6FD4" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
-            <StackPanel VerticalAlignment="Center"><TextBlock Text="Highest access" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileAccess" Text="-" Style="{StaticResource TileValue}"/></StackPanel>
+            <StackPanel VerticalAlignment="Center"><TextBlock x:Name="TileAccessLabel" Text="Highest access" Style="{StaticResource TileLabel}"/><TextBlock x:Name="TileAccess" Text="-" Style="{StaticResource TileValue}"/></StackPanel>
           </StackPanel>
         </Border>
       </UniformGrid>
@@ -1086,6 +1086,7 @@ $guiScript = {
     $tenantChip  = & $get 'TenantChip';   $chipText  = & $get 'TenantChipText'; $chipIcon = & $get 'TenantChipIcon'
     $settingsBtn = & $get 'SettingsButton'
     $tileRoutes  = & $get 'TileRoutes';   $tileUnexp = & $get 'TileUnexpected'; $tileUnexpCard = & $get 'TileUnexpectedCard'
+    $tileRoutesLabel = & $get 'TileRoutesLabel'; $tileUnexpLabel = & $get 'TileUnexpLabel'; $tileSitesLabel = & $get 'TileSitesLabel'; $tileAccessLabel = & $get 'TileAccessLabel'
     $tileSites   = & $get 'TileSites';    $tileAccess = & $get 'TileAccess'
     $filterBox   = & $get 'FilterBox';    $filterPlace = & $get 'FilterPlaceholder'
     $exportBtn = & $get 'ExportButton'
@@ -1484,18 +1485,31 @@ $guiScript = {
         # [object[]] cast, not @(): in PS 7.6.3 @() around a List[object] throws
         # "Argument types do not match". The cast handles both a List and @().
         $rows = [object[]]$rows
-        $tileRoutes.Text = "$($rows.Count)"
         $u = @($rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
-        $tileUnexp.Text  = "$u"
-        $tileSites.Text  = "$(@($rows | Select-Object -ExpandProperty SiteUrl -Unique).Count)"
-        $highest = ($rows | Sort-Object @{ e = { & $accessRank $_.EffectiveAccess } } -Descending | Select-Object -First 1).EffectiveAccess
-        $tileAccess.Text = if ($highest) { $highest } else { '-' }
-        # tiles that should shout. Neutral text/background use the LIVE theme
-        # brushes (from the resource dictionary) so they follow a dark/light swap;
-        # red/green are semantic and read on both themes.
+        if ($script:isCompare) {
+            # bucket by site/object (matching the grid grouping): Shared / Only A / Only B
+            $keyFor = { param($rr) if (($rr.PSObject.Properties.Name -contains 'ObjectUrl') -and $rr.ObjectUrl) { "$($rr.ObjectUrl)" } else { "$($rr.SiteUrl)" } }
+            $setA = @{}; $setB = @{}
+            foreach ($r in $rows) { $k = & $keyFor $r; if ("$($r.CmpUser)" -eq 'B') { $setB[$k] = $true } else { $setA[$k] = $true } }
+            $shared = 0; $onlyA = 0; $onlyB = 0
+            foreach ($k in (@($setA.Keys) + @($setB.Keys) | Sort-Object -Unique)) {
+                if ($setA.ContainsKey($k) -and $setB.ContainsKey($k)) { $shared++ } elseif ($setA.ContainsKey($k)) { $onlyA++ } else { $onlyB++ }
+            }
+            $shortA = ("$($script:cmpUserA)" -split ' - ')[0]; $shortB = ("$($script:cmpUserB)" -split ' - ')[0]
+            $tileRoutesLabel.Text = 'Shared';        $tileRoutes.Text = "$shared"
+            $tileSitesLabel.Text  = "Only $shortA";  $tileSites.Text  = "$onlyA"
+            $tileAccessLabel.Text = "Only $shortB";  $tileAccess.Text = "$onlyB"; $tileAccess.Foreground = $window.Resources['Ink']
+        } else {
+            $tileRoutesLabel.Text = 'Routes found';  $tileRoutes.Text = "$($rows.Count)"
+            $tileSitesLabel.Text  = 'Sites reached'; $tileSites.Text  = "$(@($rows | Select-Object -ExpandProperty SiteUrl -Unique).Count)"
+            $highest = ($rows | Sort-Object @{ e = { & $accessRank $_.EffectiveAccess } } -Descending | Select-Object -First 1).EffectiveAccess
+            $tileAccessLabel.Text = 'Highest access'; $tileAccess.Text = if ($highest) { $highest } else { '-' }
+            $tileAccess.Foreground = if ($highest -eq 'Full Control') { $window.Resources['TileDanger'] } elseif ($highest -eq 'Edit') { $brSubtle } else { $window.Resources['Ink'] }
+        }
+        # Overshared tile is the same in both modes - and should shout when > 0
+        $tileUnexpLabel.Text = 'Overshared'; $tileUnexp.Text = "$u"
         if ($u -gt 0) { $tileUnexpCard.Background = $window.Resources['TileOversharedBg']; $tileUnexp.Foreground = $window.Resources['TileDanger'] }
         else          { $tileUnexpCard.Background = $window.Resources['TileBg']; $tileUnexp.Foreground = $window.Resources['Ink'] }
-        $tileAccess.Foreground = if ($highest -eq 'Full Control') { $window.Resources['TileDanger'] } elseif ($highest -eq 'Edit') { $brSubtle } else { $window.Resources['Ink'] }
     }
 
     # connection state (set on Connect; declared here so $loadSites can read it)
@@ -2163,6 +2177,10 @@ $guiScript = {
                      else { $null }
             if (-not $userB) { $status.Text = 'Compare mode: pick a second user as well.'; return }
         }
+        # compare bookkeeping (set before the tiles reset so they read it)
+        $script:isCompare = [bool]$userB
+        $script:cmpUserA = if ($selected) { "$($selected.Display)" } else { "$user" }
+        $script:cmpUserB = if ($userB) { if ($selectedB) { "$($selectedB.Display)" } else { "$userB" } } else { '' }
 
         $mode = switch ($scopeCombo.SelectedIndex) { 0 { 'Tenant' } 2 { 'Deep' } default { 'Site' } }
         $isTenant = ($mode -eq 'Tenant')
@@ -2205,10 +2223,6 @@ $guiScript = {
         $script:lastUserDisplay = if ($selected) { "$($selected.Display)" } else { "$user" }
         $script:lastTarget = $target
         $script:lastScopeLabel = switch ($mode) { 'Tenant' { 'Whole tenant' } 'Deep' { 'One site (deep)' } default { 'One site' } }
-        # compare bookkeeping: remember each user's display so buildRows can label A/B
-        $script:isCompare = [bool]$userB
-        $script:cmpUserA = $script:lastUserDisplay
-        $script:cmpUserB = if ($selectedB) { "$($selectedB.Display)" } else { "$userB" }
         $colWho.Visibility = if ($userB) { 'Visible' } else { 'Collapsed' }
         # group by the comparison bucket in compare mode; clear it when leaving compare
         $script:groupField = if ($userB) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
