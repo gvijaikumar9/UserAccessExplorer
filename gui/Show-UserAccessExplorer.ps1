@@ -50,15 +50,26 @@ $guiScript = {
     }
 
     $script:ScanBlock = {
-        param($ModulePath, $User, $ClientId, $Url, $Mode)
+        param($ModulePath, $User, $ClientId, $Url, $Mode, $UserB)
         Import-Module $ModulePath -Force
-        $common = @{ User = $User; ClientId = $ClientId; Interactive = $true }
-        switch ($Mode) {
-            'Tenant' { Get-UserAccess @common -TenantWide -TenantAdminUrl $Url }
-            # Deep = one site, all the way down (subsites, lists, items) plus the
-            # sharing links a plain permission check can't see. Slow by nature.
-            'Deep'   { Get-UserAccess @common -SiteUrl $Url -Deep -IncludeItems }
-            default  { Get-UserAccess @common -SiteUrl $Url }
+        # run the same scope for one user; tag each row so the GUI can tell A from B
+        $runFor = {
+            param($u, $tag, $cid, $url, $scope)
+            $common = @{ User = $u; ClientId = $cid; Interactive = $true }
+            $rows = switch ($scope) {
+                'Tenant' { Get-UserAccess @common -TenantWide -TenantAdminUrl $url }
+                # Deep = one site, all the way down (subsites, lists, items) plus the
+                # sharing links a plain permission check can't see. Slow by nature.
+                'Deep'   { Get-UserAccess @common -SiteUrl $url -Deep -IncludeItems }
+                default  { Get-UserAccess @common -SiteUrl $url }
+            }
+            foreach ($r in $rows) { if ($tag) { $r | Add-Member -NotePropertyName CmpUser -NotePropertyValue $tag -Force }; $r }
+        }
+        if ($UserB) {
+            & $runFor $User  'A' $ClientId $Url $Mode
+            & $runFor $UserB 'B' $ClientId $Url $Mode
+        } else {
+            & $runFor $User $null $ClientId $Url $Mode
         }
     }
 
@@ -538,6 +549,7 @@ $guiScript = {
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
@@ -546,7 +558,12 @@ $guiScript = {
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,0">
-          <TextBlock Text="User" Style="{StaticResource TileLabel}" Margin="0,0,0,4"/>
+          <DockPanel Margin="0,0,0,4">
+            <TextBlock Text="User" Style="{StaticResource TileLabel}"/>
+            <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" FontSize="11.5">
+              <Hyperlink x:Name="CompareLink" Foreground="{DynamicResource Accent}" TextDecorations="None">Compare two users</Hyperlink>
+            </TextBlock>
+          </DockPanel>
           <Grid>
             <ComboBox x:Name="UserCombo" Style="{StaticResource FieldCombo}" IsEnabled="False"
                       IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" DisplayMemberPath="Display"/>
@@ -574,6 +591,17 @@ $guiScript = {
           <TextBlock x:Name="SitePlaceholder" Text="Select a site, or type to search" Margin="12,0,0,0"
                      VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
         </Grid>
+
+        <!-- second user, only in Compare mode -->
+        <StackPanel x:Name="UserRowB" Grid.Row="2" Grid.ColumnSpan="3" Margin="0,10,0,0" Visibility="Collapsed">
+          <TextBlock Text="Second user (to compare with)" Style="{StaticResource TileLabel}" Margin="0,0,0,4"/>
+          <Grid>
+            <ComboBox x:Name="UserComboB" Style="{StaticResource FieldCombo}"
+                      IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" DisplayMemberPath="Display"/>
+            <TextBlock x:Name="UserPlaceholderB" Text="Type a name or email - at least 2 letters" Margin="12,0,0,0"
+                       VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
+          </Grid>
+        </StackPanel>
       </Grid>
 
       <!-- STAT TILES -->
@@ -796,6 +824,11 @@ $guiScript = {
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
+            <DataGridTextColumn x:Name="ColWho" Header="User" Binding="{Binding Who}" Width="150" SortMemberPath="Who" Visibility="Collapsed">
+              <DataGridTextColumn.ElementStyle>
+                <Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+              </DataGridTextColumn.ElementStyle>
+            </DataGridTextColumn>
             <DataGridTemplateColumn Header="Site" Width="220" SortMemberPath="SiteTitle">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate>
@@ -1047,6 +1080,7 @@ $guiScript = {
 
     $get = { param($n) $window.FindName($n) }
     $userCombo   = & $get 'UserCombo';    $userPlace = & $get 'UserPlaceholder'
+    $compareLink = & $get 'CompareLink'; $userRowB = & $get 'UserRowB'; $userComboB = & $get 'UserComboB'; $userPlaceB = & $get 'UserPlaceholderB'; $colWho = & $get 'ColWho'
     $scopeCombo  = & $get 'ScopeCombo';   $scanBtn   = & $get 'ScanButton'
     $siteRow     = & $get 'SiteRow';      $siteCombo = & $get 'SiteCombo';  $sitePlace = & $get 'SitePlaceholder'
     $tenantChip  = & $get 'TenantChip';   $chipText  = & $get 'TenantChipText'; $chipIcon = & $get 'TenantChipIcon'
@@ -1097,6 +1131,15 @@ $guiScript = {
     # sortable / filterable / groupable in the grid.
     $buildRows = {
         param($rows)
+        # Compare mode: work out which site/object each user can reach, so every
+        # row can be bucketed Shared / Only A / Only B. Key by object URL (deep) or
+        # site URL. Short display names keep the "Who" column and group labels tidy.
+        $keyFor = { param($rr) if (($rr.PSObject.Properties.Name -contains 'ObjectUrl') -and $rr.ObjectUrl) { "$($rr.ObjectUrl)" } else { "$($rr.SiteUrl)" } }
+        $setA = @{}; $setB = @{}
+        $shortA = ("$($script:cmpUserA)" -split ' - ')[0]; $shortB = ("$($script:cmpUserB)" -split ' - ')[0]
+        if ($script:isCompare) {
+            foreach ($r in $rows) { $k = & $keyFor $r; if ("$($r.CmpUser)" -eq 'B') { $setB[$k] = $true } else { $setA[$k] = $true } }
+        }
         $out = foreach ($r in $rows) {
             $via     = & $cleanVia $r.GrantedVia
             $isUnexp = $r.RouteType -eq 'Overshared'
@@ -1144,6 +1187,13 @@ $guiScript = {
                 Location     = $location
                 GrantPath    = if ($r.Permission) { "$via -> $($r.Permission)" } else { "$via" }
                 Effective    = $r.EffectiveAccess
+                Who          = if ($script:isCompare) { if ("$($r.CmpUser)" -eq 'B') { $shortB } else { $shortA } } else { '' }
+                CompareStatus = if ($script:isCompare) {
+                                    $k = & $keyFor $r
+                                    if ($setA.ContainsKey($k) -and $setB.ContainsKey($k)) { 'Shared by both' }
+                                    elseif ("$($r.CmpUser)" -eq 'B') { "Only $shortB" }
+                                    else { "Only $shortA" }
+                                } else { '' }
                 FilterKey    = "$($r.SiteTitle) $($r.SiteUrl) $objKind $objLabel $location $via $($r.Permission) $($r.RouteType)".ToLower()
             }
         }
@@ -1545,6 +1595,7 @@ $guiScript = {
         param($Scan)
         $script:rows = New-Object System.Collections.Generic.List[object]
         foreach ($r in @($Scan.Rows)) { $script:rows.Add($r) }
+        $script:isCompare = $false; $colWho.Visibility = 'Collapsed'   # saved scans reload as single-user
         $script:lastMode = "$($Scan.Mode)"
         if ($script:lastMode -eq 'Deep') {
             $viewToggle.Visibility = 'Visible'; $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
@@ -2007,18 +2058,15 @@ $guiScript = {
         } catch { $pStatus.Text = "Register failed: $($_.Exception.Message)" }
     })
 
-    # --- user search-as-you-type (debounced) ---------------------------------
-    $script:searchTimer = New-Object System.Windows.Threading.DispatcherTimer
-    $script:searchTimer.Interval = [TimeSpan]::FromMilliseconds(450)
-    $script:searchTimer.Add_Tick({
-        $script:searchTimer.Stop()
-        $term = "$($userCombo.Text)".Trim()
+    # --- user search-as-you-type (debounced), shared by both user pickers -----
+    $searchUsersInto = {
+        param($combo)
+        $term = "$($combo.Text)".Trim()
         if ($term.Length -lt 2) {
-            # nudge the user once they've started typing but not enough to search
             if ($term.Length -ge 1) { $status.Text = 'Keep typing - at least 2 letters to search for a user.' }
             return
         }
-        if ($userCombo.SelectedItem -and $userCombo.SelectedItem.Display -eq $term) { return }
+        if ($combo.SelectedItem -and $combo.SelectedItem.Display -eq $term) { return }
         try {
             $cap = 25; $esc = $term.Replace("'", "''")
             $byName = (Invoke-PnPGraphMethod -Url "users?`$filter=startswith(displayName,'$esc')&`$select=displayName,userPrincipalName&`$top=$cap" -Method Get).value
@@ -2030,24 +2078,44 @@ $guiScript = {
                 [pscustomobject]@{ Display = "$($u.displayName) - $($u.userPrincipalName)"; Upn = $u.userPrincipalName }
             }
             $items = @($items | Sort-Object Display)
-            $userCombo.ItemsSource = $items
-            $userCombo.IsDropDownOpen = ($items.Count -gt 0)
+            $combo.ItemsSource = $items
+            $combo.IsDropDownOpen = ($items.Count -gt 0)
             $status.Text = if ($items.Count) { "$($items.Count) match(es). Pick one, then Scan." } else { "No users start with '$term'." }
         } catch {
             $m = "$($_.Exception.Message)"
-            # A missing Graph directory scope is the common cause - name the fix and
-            # remind them they can still scan by typing the whole address.
             if ($m -match 'Authorization_RequestDenied|Forbidden|403|does not have permission|insufficient|Access.?denied') {
                 $status.Text = "User search needs the Graph User.ReadBasic.All permission consented for this app. You can still type the full email address and click Scan."
             } else {
                 $status.Text = "Search failed: $m"
             }
         }
-    })
+    }
+    $script:searchTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:searchTimer.Interval = [TimeSpan]::FromMilliseconds(450)
+    $script:searchTimer.Add_Tick({ $script:searchTimer.Stop(); & $searchUsersInto $userCombo })
+    $script:searchTimerB = New-Object System.Windows.Threading.DispatcherTimer
+    $script:searchTimerB.Interval = [TimeSpan]::FromMilliseconds(450)
+    $script:searchTimerB.Add_Tick({ $script:searchTimerB.Stop(); & $searchUsersInto $userComboB })
     $userCombo.Add_KeyUp({
         & $ph $userCombo $userPlace
         if ("$($args[1].Key)" -in 'Down','Up','Enter','Tab','Escape','Left','Right') { return }
         $script:searchTimer.Stop(); $script:searchTimer.Start()
+    })
+    $userComboB.Add_KeyUp({
+        & $ph $userComboB $userPlaceB
+        if ("$($args[1].Key)" -in 'Down','Up','Enter','Tab','Escape','Left','Right') { return }
+        $script:searchTimerB.Stop(); $script:searchTimerB.Start()
+    })
+    $userComboB.Add_SelectionChanged({ & $ph $userComboB $userPlaceB })
+    $userComboB.Add_LostKeyboardFocus({ & $ph $userComboB $userPlaceB })
+
+    # "Compare two users" reveals the second user picker; toggle the link text
+    $script:compareMode = $false
+    $compareLink.Add_Click({
+        $script:compareMode = -not $script:compareMode
+        $userRowB.Visibility = if ($script:compareMode) { 'Visible' } else { 'Collapsed' }
+        $compareLink.Inlines.Clear()
+        [void]$compareLink.Inlines.Add($(if ($script:compareMode) { 'Single user' } else { 'Compare two users' }))
     })
 
     # --- export --------------------------------------------------------------
@@ -2073,6 +2141,7 @@ $guiScript = {
     $script:handle = $null; $script:output = $null; $script:seen = 0; $script:timer = $null; $script:cancelled = $false
     $script:lastMode = $null
     $script:lastUser = $null; $script:lastUserDisplay = $null; $script:lastTarget = $null; $script:lastScopeLabel = $null
+    $script:isCompare = $false; $script:cmpUserA = ''; $script:cmpUserB = ''
 
     $stopBtn.Add_Click({
         if ($script:bgPs) { $script:cancelled = $true; try { $script:bgPs.Stop() } catch { Write-Verbose "$_" } ; $status.Text = 'Stopping...' }
@@ -2084,6 +2153,16 @@ $guiScript = {
                 elseif ("$($userCombo.Text)" -match '@') { "$($userCombo.Text)".Trim() }
                 else { $null }
         if (-not $user) { $status.Text = 'Pick a user from the search list first.'; return }
+
+        # second user, only in Compare mode
+        $userB = $null; $selectedB = $null
+        if ($script:compareMode) {
+            $selectedB = $userComboB.SelectedItem
+            $userB = if ($selectedB) { $selectedB.Upn }
+                     elseif ("$($userComboB.Text)" -match '@') { "$($userComboB.Text)".Trim() }
+                     else { $null }
+            if (-not $userB) { $status.Text = 'Compare mode: pick a second user as well.'; return }
+        }
 
         $mode = switch ($scopeCombo.SelectedIndex) { 0 { 'Tenant' } 2 { 'Deep' } default { 'Site' } }
         $isTenant = ($mode -eq 'Tenant')
@@ -2104,8 +2183,10 @@ $guiScript = {
         $scanBtn.IsEnabled = $false; $exportBtn.IsEnabled = $false
         $progress.Visibility = 'Visible'; $progress.IsIndeterminate = -not $isTenant; $progress.Value = 0
         $stopBtn.Visibility = 'Visible'
-        $status.Text = if ($mode -eq 'Deep') { "Deep scan of $target - walking subsites, lists and items. This can take a while..." } else { "Scanning $user..." }
-        $scopeNote.Text = if ($mode -eq 'Deep') {
+        $status.Text = if ($userB) { "Comparing two users - running both scans, this takes about twice as long..." } elseif ($mode -eq 'Deep') { "Deep scan of $target - walking subsites, lists and items. This can take a while..." } else { "Scanning $user..." }
+        $scopeNote.Text = if ($userB) {
+            "Comparing what each user can reach. Rows are grouped Shared by both / Only one user - the 'User' column shows whose access each route is."
+        } elseif ($mode -eq 'Deep') {
             "Deep scan: sites, libraries, folders and items that have their OWN permissions (broken inheritance). Content that inherits is covered by the access shown above it - it is not listed item by item."
         } else {
             "Each row is a route that grants this user access to a site - the sites they can reach and how. Individual files are not listed; they inherit the site's access."
@@ -2124,6 +2205,13 @@ $guiScript = {
         $script:lastUserDisplay = if ($selected) { "$($selected.Display)" } else { "$user" }
         $script:lastTarget = $target
         $script:lastScopeLabel = switch ($mode) { 'Tenant' { 'Whole tenant' } 'Deep' { 'One site (deep)' } default { 'One site' } }
+        # compare bookkeeping: remember each user's display so buildRows can label A/B
+        $script:isCompare = [bool]$userB
+        $script:cmpUserA = $script:lastUserDisplay
+        $script:cmpUserB = if ($selectedB) { "$($selectedB.Display)" } else { "$userB" }
+        $colWho.Visibility = if ($userB) { 'Visible' } else { 'Collapsed' }
+        # group by the comparison bucket in compare mode; clear it when leaving compare
+        $script:groupField = if ($userB) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
         if ($mode -eq 'Deep') {
             $viewToggle.Visibility = 'Visible'
             $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
@@ -2137,7 +2225,7 @@ $guiScript = {
         $script:bgPs = [powershell]::Create(); $script:bgPs.Runspace = $script:bgRs
         [void]$script:bgPs.AddScript($script:ScanBlock).
             AddArgument($script:ModulePath).AddArgument($user).AddArgument($script:clientId).
-            AddArgument($target).AddArgument($mode)
+            AddArgument($target).AddArgument($mode).AddArgument($userB)
 
         $script:output = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
         $inbuf = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
@@ -2181,7 +2269,8 @@ $guiScript = {
                 $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
 
                 # persist the completed scan so it can be reloaded instantly later
-                if (-not $script:cancelled -and $script:rows.Count -gt 0) {
+                # (compare runs aren't saved - reload has no compare view yet)
+                if (-not $script:cancelled -and $script:rows.Count -gt 0 -and -not $script:isCompare) {
                     & $saveScan $script:lastUser $script:lastUserDisplay $script:lastMode $script:lastScopeLabel $script:lastTarget $script:rows
                 }
 
