@@ -2209,6 +2209,8 @@ $guiScript = {
         $progress.Visibility = 'Visible'; $progress.IsIndeterminate = -not $isTenant; $progress.Value = 0
         $stopBtn.Visibility = 'Visible'
         $status.Text = if ($userB) { "Comparing two users - running both scans, this takes about twice as long..." } elseif ($mode -eq 'Deep') { "Deep scan of $target - walking subsites, lists and items. This can take a while..." } else { "Scanning $user..." }
+        # reset the banner colour - a prior compare may have turned it red (guard below)
+        $scopeNote.Foreground = [System.Windows.Media.Brush]([System.Windows.Media.BrushConverter]::new().ConvertFromString('#9AA0A6'))
         $scopeNote.Text = if ($userB) {
             "Comparing what each user can reach. Rows are grouped Shared by both / Only one user - the 'User' column shows whose access each route is."
         } elseif ($mode -eq 'Deep') {
@@ -2301,6 +2303,19 @@ $guiScript = {
 
                 $u = @($script:rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
                 $skipNote = if ($skipped) { " ($skipped site(s) skipped)" } else { "" }
+
+                # Compare guard: a transient throttle can leave the SECOND user's deep
+                # scan empty, which then reads as "no access" and would be presented as
+                # fact. If one side is empty while the other has rows, flag it as a
+                # likely incomplete scan rather than silently implying zero access.
+                $emptyCmpUser = $null
+                if (-not $script:cancelled -and $script:isCompare -and $script:rows.Count -gt 0) {
+                    $cntA = @($script:rows | Where-Object { "$($_.CmpUser)" -eq 'A' }).Count
+                    $cntB = @($script:rows | Where-Object { "$($_.CmpUser)" -eq 'B' }).Count
+                    if     ($cntA -gt 0 -and $cntB -eq 0) { $emptyCmpUser = ("$($script:cmpUserB)" -split ' - ')[0] }
+                    elseif ($cntB -gt 0 -and $cntA -eq 0) { $emptyCmpUser = ("$($script:cmpUserA)" -split ' - ')[0] }
+                }
+
                 if ($script:cancelled) { $status.Text = "Stopped. $($script:rows.Count) route(s) collected, $u overshared." }
                 elseif ($failMsg -and $script:rows.Count -eq 0) {
                     $emptyState.Text = "Scan failed: $failMsg"; $emptyState.Visibility = 'Visible'; $status.Text = "Failed: $failMsg"
@@ -2308,6 +2323,11 @@ $guiScript = {
                 elseif ($script:rows.Count -eq 0) {
                     $emptyState.Text = 'No access found - this user cannot reach the scanned scope.'; $emptyState.Visibility = 'Visible'
                     $status.Text = 'Done: no access found.'
+                }
+                elseif ($emptyCmpUser) {
+                    $scopeNote.Text = "$emptyCmpUser returned no access on this scope. That can be genuine - or a transient throttle emptying the second scan of a back-to-back compare. If it looks wrong, run Scan again to confirm."
+                    $scopeNote.Foreground = [System.Windows.Media.Brush]$window.Resources['TileDanger']
+                    $status.Text = "Done: $($script:rows.Count) route(s), $u overshared$skipNote - $emptyCmpUser had none (re-run if unexpected)."
                 }
                 else { $status.Text = "Done: $($script:rows.Count) route(s), $u overshared$skipNote." }
             }
