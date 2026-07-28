@@ -469,6 +469,7 @@ $guiScript = {
           <TextBlock Text="DISCOVER" FontSize="10.5" FontWeight="SemiBold" Foreground="#9AA0A6" Margin="12,0,0,6"/>
           <RadioButton x:Name="NavScan"  Style="{StaticResource NavItem}" Content="Scan"        Tag="&#xE721;" IsChecked="True"/>
           <RadioButton x:Name="NavSaved" Style="{StaticResource NavItem}" Content="Saved scans" Tag="&#xE81C;"/>
+          <RadioButton x:Name="NavReports" Style="{StaticResource NavItem}" Content="Reports" Tag="&#xE8A5;"/>
         </StackPanel>
       </DockPanel>
     </Border>
@@ -947,6 +948,57 @@ $guiScript = {
     </Grid>
   </Border>
 
+  <!-- REPORTS VIEW -->
+  <Border x:Name="ReportsView" Visibility="Collapsed" Margin="14" Background="{DynamicResource Surface}" CornerRadius="10"
+          BorderBrush="{DynamicResource Line}" BorderThickness="1">
+    <Grid Margin="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="20,16,20,12">
+        <TextBlock Text="Reports" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+        <TextBlock Text="Every report you export is kept here - open or delete it anytime" FontSize="12.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
+      </StackPanel>
+      <Border Grid.Row="0" Height="1" Background="{DynamicResource Line}" VerticalAlignment="Bottom"/>
+
+      <ScrollViewer Grid.Row="1" Margin="20,8,20,16" VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="ReportsList">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="{DynamicResource TileBg}" CornerRadius="8" Padding="14,10,10,10" Margin="0,0,0,8"
+                      BorderBrush="{DynamicResource Line}" BorderThickness="1">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="OpenReportBtn" Style="{StaticResource Secondary}" Content="Open" Width="72" Height="30" Margin="0,0,8,0"/>
+                    <Button x:Name="DelReportBtn"  Style="{StaticResource IconButton}" Content="&#xE74D;" ToolTip="Delete this report"/>
+                  </StackPanel>
+                  <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{Binding UserDisplay}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+                      <TextBlock Text="  &#xB7;  " Foreground="{DynamicResource Subtle}"/>
+                      <TextBlock Text="{Binding ScopeLabel}" Foreground="{DynamicResource Subtle}"/>
+                      <Border Background="{DynamicResource IconBlue}" CornerRadius="4" Padding="6,1,6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Format}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Accent}"/>
+                      </Border>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                      <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
+                      <TextBlock Text="{Binding RouteCount, StringFormat='   &#xB7;   {0} routes'}" FontSize="12" Foreground="#9AA0A6"/>
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <TextBlock x:Name="ReportsEmpty" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="#9AA0A6" FontSize="14" Text="No reports yet - run a scan and click Export to create one."/>
+    </Grid>
+  </Border>
+
     </Grid>  <!-- /content -->
   </Grid>    <!-- /shell -->
 
@@ -971,6 +1023,7 @@ $guiScript = {
     $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
     $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $navSettings = & $get 'NavSettings'; $themeToggle = & $get 'ThemeToggle'
+    $navReports = & $get 'NavReports'; $reportsView = & $get 'ReportsView'; $reportsList = & $get 'ReportsList'; $reportsEmpty = & $get 'ReportsEmpty'
     $list        = & $get 'ResultsGrid';  $emptyState = & $get 'EmptyState'
     $progress    = & $get 'Progress';     $status = & $get 'StatusText'; $stopBtn = & $get 'StopButton'
 
@@ -1463,6 +1516,52 @@ $guiScript = {
         & $loadScan $t
     }
 
+    # --- saved reports -------------------------------------------------------
+    # A "report" is the exported HTML/CSV document (distinct from a saved scan,
+    # which is reloadable row data). On export we ALSO keep a managed copy under
+    # the roaming profile + a .meta.json sidecar, so the Reports view can list and
+    # re-open them reliably even if the user saved the original elsewhere.
+    $script:reportsDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'UserAccessExplorer\reports'
+    $saveReport = {
+        param($SourcePath, $User, $UserDisplay, $ScopeLabel, $Format, $RouteCount)
+        try {
+            if (-not (Test-Path $script:reportsDir)) { New-Item -ItemType Directory -Path $script:reportsDir -Force | Out-Null }
+            $ext  = [System.IO.Path]::GetExtension($SourcePath)
+            $base = [Guid]::NewGuid().ToString('N')
+            $dest = Join-Path $script:reportsDir "$base$ext"
+            Copy-Item -Path $SourcePath -Destination $dest -Force
+            [pscustomobject]@{
+                User = "$User"; UserDisplay = "$UserDisplay"; ScopeLabel = "$ScopeLabel"; Format = "$Format"
+                RouteCount = [int]$RouteCount; Timestamp = (Get-Date).ToString('o'); File = "$dest"; OriginalPath = "$SourcePath"
+            } | ConvertTo-Json | Set-Content -Path (Join-Path $script:reportsDir "$base.meta.json") -Encoding UTF8
+            $metas = @(Get-ChildItem $script:reportsDir -Filter *.meta.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+            if ($metas.Count -gt 25) {
+                $metas | Select-Object -Skip 25 | ForEach-Object {
+                    try { $m = Get-Content $_.FullName -Raw | ConvertFrom-Json; if ($m.File -and (Test-Path $m.File)) { Remove-Item $m.File -Force -ErrorAction SilentlyContinue } } catch { Write-Verbose "prune report file skipped: $($_.Exception.Message)" }
+                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                }
+            }
+        } catch { Write-Verbose "save report skipped: $($_.Exception.Message)" }
+    }
+    $listReports = {
+        if (-not (Test-Path $script:reportsDir)) { return @() }
+        @(Get-ChildItem $script:reportsDir -Filter *.meta.json -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | ForEach-Object {
+                try {
+                    $j = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    $w = try { ([datetime]$j.Timestamp).ToString('MMM d, yyyy  HH:mm') } catch { "$($j.Timestamp)" }
+                    $j | Add-Member -NotePropertyName When      -NotePropertyValue $w          -Force
+                    $j | Add-Member -NotePropertyName _MetaPath -NotePropertyValue $_.FullName -Force
+                    $j
+                } catch { Write-Verbose "skipped unreadable report meta: $($_.Exception.Message)" }
+            })
+    }
+    $refreshReports = {
+        $reports = @(& $listReports)
+        $reportsList.ItemsSource = $reports
+        $reportsEmpty.Visibility = if ($reports.Count -eq 0) { 'Visible' } else { 'Collapsed' }
+    }
+
     # Populate the One-site picker once, in the background, so choosing a site is
     # a selection rather than a URL to type. Kicked off on connect and again if
     # the user switches to One site before it has loaded.
@@ -1592,8 +1691,9 @@ $guiScript = {
         $savedList.ItemsSource = $scans
         $savedEmpty.Visibility = if ($scans.Count -eq 0) { 'Visible' } else { 'Collapsed' }
     }
-    $navScan.Add_Checked({ $scanView.Visibility = 'Visible'; $savedView.Visibility = 'Collapsed' })
-    $navSaved.Add_Checked({ & $refreshSaved; $savedView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed' })
+    $navScan.Add_Checked({ $scanView.Visibility = 'Visible'; $savedView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
+    $navSaved.Add_Checked({ & $refreshSaved; $savedView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
+    $navReports.Add_Checked({ & $refreshReports; $reportsView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $savedView.Visibility = 'Collapsed' })
     $navSettings.Add_Click({ $popup.PlacementTarget = $navSettings; $popup.IsOpen = $true })
 
     # --- light / dark theme ---------------------------------------------------
@@ -1648,6 +1748,34 @@ $guiScript = {
                     if ($scan -and $scan._Path) {
                         try { Remove-Item $scan._Path -Force -ErrorAction SilentlyContinue } catch { Write-Verbose "delete scan skipped: $($_.Exception.Message)" }
                         & $refreshSaved
+                    }
+                    break
+                }
+                $node = [System.Windows.Media.VisualTreeHelper]::GetParent($node)
+            }
+        }
+    )
+
+    # Open / Delete for the Reports view (mirrors the Saved-scans handler).
+    $reportsList.AddHandler(
+        [System.Windows.Controls.Primitives.ButtonBase]::ClickEvent,
+        [System.Windows.RoutedEventHandler]{
+            $node = $args[1].OriginalSource
+            while ($node) {
+                if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'OpenReportBtn') {
+                    $rep = $node.DataContext
+                    $target = if ($rep.File -and (Test-Path $rep.File)) { $rep.File } else { $rep.OriginalPath }
+                    if ($target) { try { Start-Process $target } catch { $status.Text = "Could not open the report: $($_.Exception.Message)" } }
+                    break
+                }
+                if ($node -is [System.Windows.Controls.Button] -and $node.Name -eq 'DelReportBtn') {
+                    $rep = $node.DataContext
+                    if ($rep) {
+                        try {
+                            if ($rep.File -and (Test-Path $rep.File)) { Remove-Item $rep.File -Force -ErrorAction SilentlyContinue }
+                            if ($rep._MetaPath -and (Test-Path $rep._MetaPath)) { Remove-Item $rep._MetaPath -Force -ErrorAction SilentlyContinue }
+                        } catch { Write-Verbose "delete report skipped: $($_.Exception.Message)" }
+                        & $refreshReports
                     }
                     break
                 }
@@ -1747,9 +1875,12 @@ $guiScript = {
         $dlg.Filter = 'HTML report (*.html)|*.html|CSV (*.csv)|*.csv'; $dlg.FileName = 'access-report.html'
         if ($dlg.ShowDialog()) {
             try {
-                if ($dlg.FileName -match '\.csv$') { $flat | Export-UserAccessReport -Path $dlg.FileName | Out-Null }
+                $fmt = if ($dlg.FileName -match '\.csv$') { 'CSV' } else { 'HTML' }
+                if ($fmt -eq 'CSV') { $flat | Export-UserAccessReport -Path $dlg.FileName | Out-Null }
                 else { $flat | Export-UserAccessReport -Path $dlg.FileName -Html | Out-Null }
-                $status.Text = "Report saved to $($dlg.FileName)"
+                # keep a managed copy so it shows in the Reports view
+                & $saveReport $dlg.FileName $script:lastUser $script:lastUserDisplay $script:lastScopeLabel $fmt $flat.Count
+                $status.Text = "Report saved to $($dlg.FileName) - also in Reports"
             } catch { $status.Text = "Export failed: $($_.Exception.Message)" }
         }
     })
