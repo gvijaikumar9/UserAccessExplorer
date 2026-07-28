@@ -1461,7 +1461,10 @@ $guiScript = {
     $saveScan = {
         param($User, $UserDisplay, $Mode, $ScopeLabel, $Target, $Rows)
         try {
-            $arr = @($Rows)
+            # [object[]] cast, NOT @(): @() around a generic List[object] throws
+            # "Argument types do not match" in PS 7.6.3 - this silently killed every
+            # scan-save (Saved scans stayed empty while Reports worked).
+            $arr = [object[]]$Rows
             [pscustomobject]@{
                 User = "$User"; UserDisplay = "$UserDisplay"; Mode = "$Mode"; ScopeLabel = "$ScopeLabel"; Target = "$Target"
                 Timestamp = (Get-Date).ToString('o')
