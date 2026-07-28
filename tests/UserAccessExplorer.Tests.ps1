@@ -91,6 +91,7 @@ Describe 'Export-UserAccessReport' {
         $c | Should -Match 'File: Secret.docx'   # object column
         $c | Should -Match '>Manage<'            # permissions link
         $c | Should -Match 'user\.aspx'          # points at the (proven) permissions page
+        $c | Should -Match 'target="_blank"'     # opens in a new tab, not the same one
     }
     It 'HTML-encodes special characters (no injection)' {
         $h = Join-Path $script:tmp 'enc.html'
