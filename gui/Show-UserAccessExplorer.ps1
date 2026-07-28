@@ -547,7 +547,7 @@ $guiScript = {
           <Grid>
             <ComboBox x:Name="UserCombo" Style="{StaticResource FieldCombo}" IsEnabled="False"
                       IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" DisplayMemberPath="Display"/>
-            <TextBlock x:Name="UserPlaceholder" Text="Type a name or email to search" Margin="12,0,0,0"
+            <TextBlock x:Name="UserPlaceholder" Text="Type a name or email - at least 2 letters" Margin="12,0,0,0"
                        VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
           </Grid>
         </StackPanel>
@@ -2002,7 +2002,11 @@ $guiScript = {
     $script:searchTimer.Add_Tick({
         $script:searchTimer.Stop()
         $term = "$($userCombo.Text)".Trim()
-        if ($term.Length -lt 2) { return }
+        if ($term.Length -lt 2) {
+            # nudge the user once they've started typing but not enough to search
+            if ($term.Length -ge 1) { $status.Text = 'Keep typing - at least 2 letters to search for a user.' }
+            return
+        }
         if ($userCombo.SelectedItem -and $userCombo.SelectedItem.Display -eq $term) { return }
         try {
             $cap = 25; $esc = $term.Replace("'", "''")
