@@ -459,11 +459,8 @@ $guiScript = {
       <DockPanel x:Name="RailDock" Margin="14,16,14,16">
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,20">
           <Button x:Name="RailToggle" Style="{StaticResource IconButton}" Content="&#xE700;" HorizontalAlignment="Left" ToolTip="Collapse / expand the sidebar"/>
-          <StackPanel Orientation="Horizontal" Margin="2,10,0,0">
-            <Image Source="{StaticResource SharePointLogo}" Width="26" Height="26" Margin="0,0,10,0" VerticalAlignment="Center"/>
-            <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}"
-                       TextWrapping="Wrap" Width="118" VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
-          </StackPanel>
+          <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}"
+                     TextWrapping="Wrap" Width="150" Margin="2,10,0,0" Visibility="{DynamicResource NavTextVis}"/>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
           <Border Height="1" Background="{DynamicResource Line}" Margin="0,0,0,10"/>
@@ -802,11 +799,7 @@ $guiScript = {
                   <DockPanel LastChildFill="True" ToolTip="{Binding SiteUrl}">
                     <!-- row action: always visible, opens this row's permissions page -->
                     <Button x:Name="PermButton" DockPanel.Dock="Right" Style="{StaticResource OpenPermBtn}" Margin="6,0,2,0"/>
-                    <StackPanel Orientation="Horizontal">
-                      <!-- proper SharePoint mark (vector), not a globe glyph -->
-                      <Image Source="{StaticResource SharePointLogo}" Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                      <TextBlock Text="{Binding SiteTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                    </StackPanel>
+                    <TextBlock Text="{Binding SiteTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                   </DockPanel>
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
@@ -1713,12 +1706,9 @@ $guiScript = {
         Background="{DynamicResource Surface}" CornerRadius="8" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Width="300" Margin="8">
   <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2"/></Border.Effect>
   <StackPanel Margin="18">
-    <StackPanel Orientation="Horizontal">
-      <Image Source="{DynamicResource SharePointLogo}" Width="36" Height="36" VerticalAlignment="Center" Margin="0,0,12,0"/>
-      <StackPanel VerticalAlignment="Center">
-        <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14.5" Foreground="{DynamicResource Ink}"/>
-        <TextBlock x:Name="AboutVersion" Text="Version 0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
-      </StackPanel>
+    <StackPanel>
+      <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14.5" Foreground="{DynamicResource Ink}"/>
+      <TextBlock x:Name="AboutVersion" Text="Version 0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
     </StackPanel>
     <TextBlock Text="See what a user can reach across SharePoint &#8211; and where it's overshared." FontSize="11.5" Foreground="{DynamicResource Subtle}" TextWrapping="Wrap" Margin="0,12,0,0"/>
     <Border Height="1" Background="{DynamicResource Line}" Margin="0,14,0,0"/>
