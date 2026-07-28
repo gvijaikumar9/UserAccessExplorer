@@ -114,9 +114,12 @@ $guiScript = {
     <SolidColorBrush x:Key="Hover"            Color="#EDEFF2"/>
     <SolidColorBrush x:Key="NavActive"        Color="#E7F0FB"/>
 
+    <!-- Fixed glyph colour (not a themed brush): MDL2 glyph runs do NOT reliably
+         repaint when their DynamicResource foreground is swapped on a theme change,
+         so they blank out in dark mode. #8A9099 reads on both light and dark. -->
     <Style x:Key="Glyph" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
+      <Setter Property="Foreground" Value="#8A9099"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
@@ -183,7 +186,7 @@ $guiScript = {
                     <Border CornerRadius="6" Background="{TemplateBinding Background}"
                             BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderThickness="1">
                       <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="9"
-                                 Foreground="{DynamicResource Subtle}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                 Foreground="#8A9099" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     </Border>
                   </ControlTemplate>
                 </ToggleButton.Template>
@@ -271,7 +274,7 @@ $guiScript = {
       <Setter Property="Width" Value="34"/>
       <Setter Property="Height" Value="34"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
+      <Setter Property="Foreground" Value="#8A9099"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
@@ -363,7 +366,7 @@ $guiScript = {
             <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0" ToolTip="{TemplateBinding Content}">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock x:Name="ico" Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
-                           Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                           Foreground="#8A9099" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <ContentPresenter VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
               </StackPanel>
             </Border>
@@ -371,8 +374,8 @@ $guiScript = {
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
               <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="b" Property="Background" Value="{DynamicResource NavActive}"/>
-                <Setter TargetName="ico" Property="Foreground" Value="{StaticResource Accent}"/>
-                <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                <Setter TargetName="ico" Property="Foreground" Value="#4C9DF0"/>
+                <Setter Property="Foreground" Value="#4C9DF0"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
               </Trigger>
             </ControlTemplate.Triggers>
@@ -394,7 +397,7 @@ $guiScript = {
             <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0" ToolTip="{TemplateBinding Content}">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
-                           Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                           Foreground="#8A9099" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <ContentPresenter VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
               </StackPanel>
             </Border>
@@ -477,7 +480,7 @@ $guiScript = {
               </ControlTemplate>
             </Button.Template>
             <StackPanel Orientation="Horizontal">
-              <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+              <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#8A9099" VerticalAlignment="Center" Margin="0,0,7,0"/>
               <TextBlock x:Name="VersionText" Text="v0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
               <Border x:Name="UpdateBadge" Background="{DynamicResource Accent}" CornerRadius="7" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
                 <TextBlock Text="Update" FontSize="10" FontWeight="SemiBold" Foreground="White"/>
@@ -809,7 +812,7 @@ $guiScript = {
                 <DataTemplate>
                   <StackPanel Orientation="Horizontal" ToolTip="{Binding ObjectUrl}">
                     <TextBlock Style="{StaticResource Glyph}" Text="{Binding ObjectGlyph}" FontSize="13"
-                               Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
                     <TextBlock Text="{Binding ObjectLabel}" Foreground="{DynamicResource Subtle}"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                   </StackPanel>
@@ -851,7 +854,7 @@ $guiScript = {
                 <TextBlock Text="{Binding Glyph}" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="0,0,7,0">
                   <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
+                      <Setter Property="Foreground" Value="#8A9099"/>
                       <Style.Triggers>
                         <DataTrigger Binding="{Binding Kind}" Value="Site"><Setter Property="Foreground" Value="#036C70"/></DataTrigger>
                         <DataTrigger Binding="{Binding Kind}" Value="Subsite"><Setter Property="Foreground" Value="#036C70"/></DataTrigger>
