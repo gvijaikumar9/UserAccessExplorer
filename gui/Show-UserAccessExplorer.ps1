@@ -360,11 +360,11 @@ $guiScript = {
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0">
+            <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0" ToolTip="{TemplateBinding Content}">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock x:Name="ico" Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
                            Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <ContentPresenter VerticalAlignment="Center"/>
+                <ContentPresenter VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
               </StackPanel>
             </Border>
             <ControlTemplate.Triggers>
@@ -391,11 +391,11 @@ $guiScript = {
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0">
+            <Border x:Name="b" CornerRadius="8" Background="Transparent" Padding="12,0,12,0" ToolTip="{TemplateBinding Content}">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="15"
                            Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <ContentPresenter VerticalAlignment="Center"/>
+                <ContentPresenter VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
               </StackPanel>
             </Border>
             <ControlTemplate.Triggers>
@@ -455,12 +455,15 @@ $guiScript = {
     </Grid.ColumnDefinitions>
 
     <!-- LEFT RAIL -->
-    <Border Grid.Column="0" Width="208" Background="{DynamicResource RailBg}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
-      <DockPanel Margin="16,20,16,16">
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,22">
-          <Image Source="{StaticResource SharePointLogo}" Width="26" Height="26" Margin="0,0,10,0" VerticalAlignment="Center"/>
-          <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}"
-                     TextWrapping="Wrap" Width="120" VerticalAlignment="Center"/>
+    <Border x:Name="RailBorder" Grid.Column="0" Width="208" Background="{DynamicResource RailBg}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel x:Name="RailDock" Margin="14,16,14,16">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,20">
+          <Button x:Name="RailToggle" Style="{StaticResource IconButton}" Content="&#xE700;" HorizontalAlignment="Left" ToolTip="Collapse / expand the sidebar"/>
+          <StackPanel Orientation="Horizontal" Margin="2,10,0,0">
+            <Image Source="{StaticResource SharePointLogo}" Width="26" Height="26" Margin="0,0,10,0" VerticalAlignment="Center"/>
+            <TextBlock Text="User Access Explorer" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Ink}"
+                       TextWrapping="Wrap" Width="118" VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
+          </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
           <Border Height="1" Background="{DynamicResource Line}" Margin="0,0,0,10"/>
@@ -478,7 +481,7 @@ $guiScript = {
             </Button.Template>
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Margin="0,0,7,0"/>
-              <TextBlock x:Name="VersionText" Text="v0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center"/>
+              <TextBlock x:Name="VersionText" Text="v0.0.0" FontSize="11.5" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center" Visibility="{DynamicResource NavTextVis}"/>
               <Border x:Name="UpdateBadge" Background="{DynamicResource Accent}" CornerRadius="7" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
                 <TextBlock Text="Update" FontSize="10" FontWeight="SemiBold" Foreground="White"/>
               </Border>
@@ -486,7 +489,7 @@ $guiScript = {
           </Button>
         </StackPanel>
         <StackPanel DockPanel.Dock="Top">
-          <TextBlock Text="DISCOVER" FontSize="10.5" FontWeight="SemiBold" Foreground="#9AA0A6" Margin="12,0,0,6"/>
+          <TextBlock Text="DISCOVER" FontSize="10.5" FontWeight="SemiBold" Foreground="#9AA0A6" Margin="12,0,0,6" Visibility="{DynamicResource NavTextVis}"/>
           <RadioButton x:Name="NavScan"  Style="{StaticResource NavItem}" Content="Scan"        Tag="&#xE721;" IsChecked="True"/>
           <RadioButton x:Name="NavSaved" Style="{StaticResource NavItem}" Content="Scan history" Tag="&#xE81C;"/>
           <RadioButton x:Name="NavReports" Style="{StaticResource NavItem}" Content="Reports" Tag="&#xE8A5;"/>
@@ -1061,6 +1064,8 @@ $guiScript = {
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
     $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $themeToggle = & $get 'ThemeToggle'
     $versionButton = & $get 'VersionButton'; $versionText = & $get 'VersionText'; $updateBadge = & $get 'UpdateBadge'
+    $railBorder = & $get 'RailBorder'; $railDock = & $get 'RailDock'; $railToggle = & $get 'RailToggle'
+    $window.Resources['NavTextVis'] = [System.Windows.Visibility]::Visible   # rail labels shown by default
     $script:appVersion = try { "$((Import-PowerShellDataFile $ModulePath).ModuleVersion)" } catch { '0.0.0' }
     $script:repo = 'gvijaikumar9/UserAccessExplorer'
     $script:guideUrl = 'https://fivenumber.com/user-access-explorer/'   # author's guide / write-up
@@ -1858,6 +1863,19 @@ $guiScript = {
         $savedList.ItemsSource = $scans
         $savedEmpty.Visibility = if ($scans.Count -eq 0) { 'Visible' } else { 'Collapsed' }
     }
+    # collapse/expand the rail to an icon-only strip (labels hide via NavTextVis)
+    $script:railCollapsed = $false
+    $railToggle.Add_Click({
+        $script:railCollapsed = -not $script:railCollapsed
+        if ($script:railCollapsed) {
+            $railBorder.Width = 56; $railDock.Margin = [System.Windows.Thickness]::new(8, 16, 8, 16)
+            $window.Resources['NavTextVis'] = [System.Windows.Visibility]::Collapsed
+        } else {
+            $railBorder.Width = 208; $railDock.Margin = [System.Windows.Thickness]::new(14, 16, 14, 16)
+            $window.Resources['NavTextVis'] = [System.Windows.Visibility]::Visible
+        }
+    })
+
     $navScan.Add_Checked({ $scanView.Visibility = 'Visible'; $savedView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
     $navSaved.Add_Checked({ & $refreshSaved; $savedView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $reportsView.Visibility = 'Collapsed' })
     $navReports.Add_Checked({ & $refreshReports; $reportsView.Visibility = 'Visible'; $scanView.Visibility = 'Collapsed'; $savedView.Visibility = 'Collapsed' })
