@@ -105,6 +105,8 @@ $guiScript = {
             }
             $r | Add-Member -NotePropertyName GrantedVia      -NotePropertyValue $via   -Force
             $r | Add-Member -NotePropertyName EffectiveAccess -NotePropertyValue $perm  -Force
+            # a subject label so Export-UserAccessReport (which reads .User) works
+            $r | Add-Member -NotePropertyName User            -NotePropertyValue $Site  -Force
             $r
         }
     }
@@ -896,9 +898,9 @@ $guiScript = {
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTextColumn x:Name="ColWho" Header="User" Binding="{Binding Who}" Width="150" SortMemberPath="Who" Visibility="Collapsed">
+            <DataGridTextColumn x:Name="ColWho" Header="User" Binding="{Binding Who}" Width="200" SortMemberPath="Who" Visibility="Collapsed">
               <DataGridTextColumn.ElementStyle>
-                <Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+                <Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="ToolTip" Value="{Binding Who}"/></Style>
               </DataGridTextColumn.ElementStyle>
             </DataGridTextColumn>
             <!-- by-site only: principal type + member count -->
@@ -1187,6 +1189,26 @@ $guiScript = {
     $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
     $colSite = & $get 'ColSite'; $colGrantPath = & $get 'ColGrantPath'; $colEffective = & $get 'ColEffective'
     $colPType = & $get 'ColPType'; $colMembers = & $get 'ColMembers'; $colManage = & $get 'ColManage'
+
+    # Column layout for a lens - shared by a live scan and a history reload so the
+    # two never drift. By site: Who(principal) / Type / Members / Object(deep) /
+    # Permission / Manage. By user: User(compare) / Site / Object+Location(deep) /
+    # Grant path / Effective. The tree fits neither a compare nor a principal list.
+    $applyColumns = {
+        param($Lens, $IsDeep, $IsCompare)
+        $isSite = ($Lens -eq 'site')
+        $colWho.Visibility       = if ($isSite -or $IsCompare) { 'Visible' } else { 'Collapsed' }
+        $colWho.Header           = if ($isSite) { 'Who' } else { 'User' }
+        $colPType.Visibility     = if ($isSite) { 'Visible' } else { 'Collapsed' }
+        $colMembers.Visibility   = if ($isSite) { 'Visible' } else { 'Collapsed' }
+        $colManage.Visibility    = if ($isSite) { 'Visible' } else { 'Collapsed' }
+        $colSite.Visibility      = if ($isSite) { 'Collapsed' } else { 'Visible' }
+        $colGrantPath.Visibility = if ($isSite) { 'Collapsed' } else { 'Visible' }
+        $colEffective.Header     = if ($isSite) { 'Permission' } else { 'Effective' }
+        $colObject.Visibility    = if ($IsDeep) { 'Visible' } else { 'Collapsed' }
+        $colLocation.Visibility  = if ($IsDeep -and -not $isSite) { 'Visible' } else { 'Collapsed' }
+        $viewToggle.Visibility   = if ($IsDeep -and -not $IsCompare -and -not $isSite) { 'Visible' } else { 'Collapsed' }
+    }
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
     $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $themeToggle = & $get 'ThemeToggle'
     $versionButton = & $get 'VersionButton'; $versionText = & $get 'VersionText'; $updateBadge = & $get 'UpdateBadge'
@@ -1680,7 +1702,7 @@ $guiScript = {
         } catch { Write-Verbose "prune scans skipped: $($_.Exception.Message)" }
     }
     $saveScan = {
-        param($User, $UserDisplay, $Mode, $ScopeLabel, $Target, $Rows, $IsCompare, $CmpA, $CmpB)
+        param($User, $UserDisplay, $Mode, $ScopeLabel, $Target, $Rows, $IsCompare, $CmpA, $CmpB, $IsSite)
         try {
             # [object[]] cast, NOT @(): @() around a generic List[object] throws
             # "Argument types do not match" in PS 7.6.3 - this silently killed every
@@ -1688,7 +1710,7 @@ $guiScript = {
             $arr = [object[]]$Rows
             [pscustomobject]@{
                 User = "$User"; UserDisplay = "$UserDisplay"; Mode = "$Mode"; ScopeLabel = "$ScopeLabel"; Target = "$Target"
-                IsCompare = [bool]$IsCompare; CmpUserA = "$CmpA"; CmpUserB = "$CmpB"
+                IsCompare = [bool]$IsCompare; CmpUserA = "$CmpA"; CmpUserB = "$CmpB"; IsSite = [bool]$IsSite
                 Timestamp = (Get-Date).ToString('o')
                 RouteCount = $arr.Count
                 OversharedCount = @($arr | Where-Object { $_.RouteType -eq 'Overshared' }).Count
@@ -1725,28 +1747,26 @@ $guiScript = {
         param($Scan)
         $script:rows = New-Object System.Collections.Generic.List[object]
         foreach ($r in @($Scan.Rows)) { $script:rows.Add($r) }
-        # restore compare state (older saved scans have no IsCompare field)
+        # restore state (older saved scans have no IsCompare / IsSite field)
         $script:isCompare = if ($Scan.PSObject.Properties.Name -contains 'IsCompare') { [bool]$Scan.IsCompare } else { $false }
         $script:cmpUserA = if ($Scan.PSObject.Properties.Name -contains 'CmpUserA') { "$($Scan.CmpUserA)" } else { '' }
         $script:cmpUserB = if ($Scan.PSObject.Properties.Name -contains 'CmpUserB') { "$($Scan.CmpUserB)" } else { '' }
-        $colWho.Visibility = if ($script:isCompare) { 'Visible' } else { 'Collapsed' }
-        $script:groupField = if ($script:isCompare) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
+        $script:lens = if (($Scan.PSObject.Properties.Name -contains 'IsSite') -and [bool]$Scan.IsSite) { 'site' } else { 'user' }
         $script:lastMode = "$($Scan.Mode)"
-        if ($script:lastMode -eq 'Deep') {
-            $viewToggle.Visibility = if ($script:isCompare) { 'Collapsed' } else { 'Visible' }   # tree has no compare view
-            $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
-        } else {
-            $viewToggle.Visibility = 'Collapsed'; $colObject.Visibility = 'Collapsed'; $colLocation.Visibility = 'Collapsed'
-        }
+        $isDeep = ($script:lastMode -eq 'Deep')
+        # same column layout the live scan produced (buildRows/tiles read $script:lens)
+        & $applyColumns $script:lens $isDeep $script:isCompare
+        $script:groupField = if ($script:isCompare) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
         $script:allRows = & $buildRows $script:rows
         & $refreshTiles $script:rows
-        $viewToggle.IsChecked = ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0 -and -not $script:isCompare)
+        $viewToggle.IsChecked = ($isDeep -and $script:rows.Count -gt 0 -and -not $script:isCompare -and $script:lens -ne 'site')
         & $applyView
         & $showView
         $exportBtn.IsEnabled = $script:rows.Count -gt 0
         $emptyState.Visibility = 'Collapsed'
         $when = try { ([datetime]$Scan.Timestamp).ToString('MMM d, HH:mm') } catch { "$($Scan.Timestamp)" }
-        $status.Text = "Cached scan of '$($Scan.ScopeLabel)' from $when - $($Scan.RouteCount) route(s), $($Scan.OversharedCount) overshared. Click Scan for live data."
+        $noun = if ($script:lens -eq 'site') { 'principal' } else { 'route' }
+        $status.Text = "Cached scan of '$($Scan.ScopeLabel)' from $when - $($Scan.RouteCount) $noun(s), $($Scan.OversharedCount) overshared. Click Scan for live data."
     }
     # Shared (non-closure) click handler for Recent-menu items - the item's Tag
     # carries the parsed scan object, or the '__clear__' sentinel.
@@ -2406,27 +2426,10 @@ $guiScript = {
         $script:lastUserDisplay = $subjectDisplay
         $script:lastTarget = $target
         $script:lastScopeLabel = switch ($mode) { 'Tenant' { 'Whole tenant' } 'Deep' { 'One site (deep)' } default { 'One site' } }
-        # ---- columns per lens -----------------------------------------------
-        $isSite = ($script:lens -eq 'site')
-        $isDeep = ($mode -eq 'Deep')
-        # Who column: the principal (by site) or the compared user (compare mode)
-        $colWho.Visibility = if ($isSite -or $userB) { 'Visible' } else { 'Collapsed' }
-        $colWho.Header     = if ($isSite) { 'Who' } else { 'User' }
-        # by-site dedicated columns (Type / Members / a Manage button)
-        $colPType.Visibility   = if ($isSite) { 'Visible' } else { 'Collapsed' }
-        $colMembers.Visibility = if ($isSite) { 'Visible' } else { 'Collapsed' }
-        $colManage.Visibility  = if ($isSite) { 'Visible' } else { 'Collapsed' }
-        # user columns hidden in by-site (principal + type carry the "how")
-        $colSite.Visibility      = if ($isSite) { 'Collapsed' } else { 'Visible' }
-        $colGrantPath.Visibility = if ($isSite) { 'Collapsed' } else { 'Visible' }
-        $colEffective.Header     = if ($isSite) { 'Permission' } else { 'Effective' }
-        # Object shows for any deep scan; Location (a breadcrumb) is user-only
-        $colObject.Visibility   = if ($isDeep) { 'Visible' } else { 'Collapsed' }
-        $colLocation.Visibility = if ($isDeep -and -not $isSite) { 'Visible' } else { 'Collapsed' }
+        # ---- columns per lens (shared with history reload) ------------------
+        & $applyColumns $script:lens ($mode -eq 'Deep') ([bool]$userB)
         # group by the comparison bucket in compare mode; clear it when leaving compare
         $script:groupField = if ($userB) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
-        # The tree can express neither a comparison nor a principal list - hide for both
-        $viewToggle.Visibility  = if ($isDeep -and -not $userB -and -not $isSite) { 'Visible' } else { 'Collapsed' }
         $viewToggle.IsChecked = $false
 
         $script:bgRs = [runspacefactory]::CreateRunspace(); $script:bgRs.Open()
@@ -2483,14 +2486,12 @@ $guiScript = {
                 $progress.Visibility = 'Collapsed'; $stopBtn.Visibility = 'Collapsed'
                 $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
 
-                # persist the completed scan so it can be reloaded instantly later.
-                # (by-site scans are not saved yet - a proper site-aware history reload
-                # comes in the next step; saving now would reload with user-lens tiles.)
-                if (-not $script:cancelled -and $script:rows.Count -gt 0 -and $script:lens -ne 'site') {
+                # persist the completed scan so it can be reloaded instantly later
+                if (-not $script:cancelled -and $script:rows.Count -gt 0) {
                     $saveDisplay = if ($script:isCompare) {
                         ("$($script:cmpUserA)" -split ' - ')[0] + '  vs  ' + ("$($script:cmpUserB)" -split ' - ')[0]
                     } else { $script:lastUserDisplay }
-                    & $saveScan $script:lastUser $saveDisplay $script:lastMode $script:lastScopeLabel $script:lastTarget $script:rows $script:isCompare $script:cmpUserA $script:cmpUserB
+                    & $saveScan $script:lastUser $saveDisplay $script:lastMode $script:lastScopeLabel $script:lastTarget $script:rows $script:isCompare $script:cmpUserA $script:cmpUserB ($script:lens -eq 'site')
                 }
 
                 $u = @($script:rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
