@@ -28,6 +28,12 @@ function Get-SiteAccess {
         Return only the Overshared routes - the Everyone claims and sharing links.
         The old name -UnexpectedOnly still works as an alias.
 
+    .PARAMETER ExpandMembers
+        Expand every group to one row per person (the group is carried in Via),
+        turning the report into the full list of people who can actually reach the
+        site. Without it, each group is a single row with a member count. Needs Graph
+        GroupMember.Read.All to resolve Entra groups.
+
     .PARAMETER ClientId
         Entra ID app registration client ID. Not needed with -UseExistingConnection.
 
@@ -48,6 +54,8 @@ function Get-SiteAccess {
 
         [Alias('UnexpectedOnly')]
         [switch]   $OversharedOnly,
+
+        [switch]   $ExpandMembers,
 
         [string]       $ClientId,
         [string]       $Tenant,
@@ -77,6 +85,9 @@ function Get-SiteAccess {
     # Sites we could not READ - tracked so an incomplete scan can be told apart from
     # a genuine result, exactly as Get-UserAccess does.
     $skipped = [System.Collections.Generic.List[string]]::new()
+    # One group -> count/members cache for the whole run: a group on many sites is
+    # resolved against Graph once.
+    $membershipCache = @{}
 
     foreach ($site in $targets) {
         $n++
@@ -84,7 +95,7 @@ function Get-SiteAccess {
                        -PercentComplete (($n / [Math]::Max($total,1)) * 100)
         try {
             Connect-IfNeeded -Url $site @connectSplat
-            Get-SiteAccessForWeb -WebUrl $site |
+            Get-SiteAccessForWeb -WebUrl $site -MembershipCache $membershipCache -ExpandMembers:$ExpandMembers |
                 Where-Object { -not $OversharedOnly -or $_.RouteType -eq 'Overshared' } |
                 ForEach-Object { $emitted++; $_ }
         }

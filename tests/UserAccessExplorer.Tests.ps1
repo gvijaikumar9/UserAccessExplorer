@@ -364,6 +364,42 @@ Describe 'Group-membership confirmation' {
             }
         }
     }
+
+    Context 'Resolve-EntraGroup (site-centric member counts)' {
+        It 'returns the people count from @odata.count without paging' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { [pscustomobject]@{ '@odata.count' = 45; value = @() } }
+                (Resolve-EntraGroup -GroupId 'g1').Count | Should -Be 45
+                Should -Invoke Invoke-PnPGraphMethod -Times 1 -Exactly
+            }
+        }
+        It 'returns the actual people when -IncludeMembers' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { [pscustomobject]@{ '@odata.count' = 2; value = @(
+                    [pscustomobject]@{ userPrincipalName='a@c.com'; displayName='Alice' },
+                    [pscustomobject]@{ userPrincipalName='b@c.com'; displayName='Bob' }) } }
+                $r = Resolve-EntraGroup -GroupId 'g1' -IncludeMembers
+                $r.Count | Should -Be 2
+                @($r.Members).Count | Should -Be 2
+                $r.Members.Display | Should -Contain 'Alice'
+            }
+        }
+        It 'returns a null count when Graph fails - a blank, never a wrong 0' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { throw 'Authorization_RequestDenied' }
+                (Resolve-EntraGroup -GroupId 'g1').Count | Should -BeNullOrEmpty
+            }
+        }
+        It 'caches per (group, include-members)' {
+            InModuleScope UserAccessExplorer {
+                Mock Invoke-PnPGraphMethod { [pscustomobject]@{ '@odata.count' = 1; value = @() } }
+                $cache = @{}
+                Resolve-EntraGroup -GroupId 'g1' -Cache $cache | Out-Null
+                Resolve-EntraGroup -GroupId 'g1' -Cache $cache | Out-Null
+                Should -Invoke Invoke-PnPGraphMethod -Times 1 -Exactly
+            }
+        }
+    }
 }
 
 Describe 'Deep scan guards' {
