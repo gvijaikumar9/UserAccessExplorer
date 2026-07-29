@@ -327,6 +327,32 @@ $guiScript = {
       </Setter>
     </Style>
 
+    <!-- segmented lens toggle (By user / By site): a radio styled as a pill segment -->
+    <Style x:Key="SegToggle" TargetType="RadioButton">
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="Padding" Value="13,0,13,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="b" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{DynamicResource Hover}"/></Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="b" Property="Background" Value="{DynamicResource Surface}"/>
+                <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <Style x:Key="TileLabel" TargetType="TextBlock">
       <Setter Property="Foreground" Value="{DynamicResource Subtle}"/>
       <Setter Property="FontSize" Value="12"/>
@@ -529,9 +555,16 @@ $guiScript = {
       <Grid Grid.Row="0" Margin="20,16,14,14">
         <StackPanel VerticalAlignment="Center">
           <TextBlock Text="Scan" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
-          <TextBlock Text="What a user can reach, and how they got there" FontSize="12.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
+          <TextBlock x:Name="ScanSubtitle" Text="What a user can reach, and how they got there" FontSize="12.5" Foreground="{DynamicResource Subtle}" Margin="0,1,0,0"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+          <Border CornerRadius="7" Background="{DynamicResource TileBg}" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1"
+                  Padding="2" VerticalAlignment="Center" Margin="0,0,10,0">
+            <StackPanel Orientation="Horizontal">
+              <RadioButton x:Name="LensUser" Style="{StaticResource SegToggle}" Content="By user" GroupName="Lens" IsChecked="True"/>
+              <RadioButton x:Name="LensSite" Style="{StaticResource SegToggle}" Content="By site" GroupName="Lens"/>
+            </StackPanel>
+          </Border>
           <Border x:Name="TenantChip" CornerRadius="12" Background="{DynamicResource TileBg}" Padding="10,4,12,4" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal">
               <TextBlock x:Name="TenantChipIcon" Style="{StaticResource Glyph}" Text="&#xE711;" FontSize="12" Foreground="{DynamicResource Subtle}" Margin="0,0,6,0"/>
@@ -557,7 +590,7 @@ $guiScript = {
           <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,0">
+        <StackPanel x:Name="UserBlock" Grid.Row="0" Grid.Column="0" Margin="0,0,12,0">
           <DockPanel Margin="0,0,0,4">
             <TextBlock Text="User" Style="{StaticResource TileLabel}"/>
             <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" FontSize="11.5">
@@ -575,7 +608,7 @@ $guiScript = {
         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,0">
           <TextBlock Text="Scope" Style="{StaticResource TileLabel}" Margin="0,0,0,4"/>
           <ComboBox x:Name="ScopeCombo" Style="{StaticResource FieldCombo}" Width="175">
-            <ComboBoxItem Content="Whole tenant" IsSelected="True"/>
+            <ComboBoxItem x:Name="ScopeTenantItem" Content="Whole tenant" IsSelected="True"/>
             <ComboBoxItem Content="One site"/>
             <ComboBoxItem Content="One site (deep)"/>
           </ComboBox>
@@ -584,13 +617,16 @@ $guiScript = {
         <Button x:Name="ScanButton" Grid.Row="0" Grid.Column="2" Style="{StaticResource Primary}"
                 Content="Scan" Width="92" VerticalAlignment="Bottom" IsEnabled="False"/>
 
-        <!-- site row, only for One site: pick from the populated list or search -->
-        <Grid x:Name="SiteRow" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,10,0,0" Visibility="Collapsed">
-          <ComboBox x:Name="SiteCombo" Style="{StaticResource FieldCombo}"
-                    IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" DisplayMemberPath="Display"/>
-          <TextBlock x:Name="SitePlaceholder" Text="Select a site, or type to search" Margin="12,0,0,0"
-                     VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
-        </Grid>
+        <!-- site row: the target site for One site (by user), or the subject (by site) -->
+        <StackPanel x:Name="SiteRow" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,10,0,0" Visibility="Collapsed">
+          <TextBlock x:Name="SiteRowLabel" Text="Site" Style="{StaticResource TileLabel}" Margin="0,0,0,4" Visibility="Collapsed"/>
+          <Grid>
+            <ComboBox x:Name="SiteCombo" Style="{StaticResource FieldCombo}"
+                      IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True" DisplayMemberPath="Display"/>
+            <TextBlock x:Name="SitePlaceholder" Text="Select a site, or type to search" Margin="12,0,0,0"
+                       VerticalAlignment="Center" Foreground="#9AA0A6" IsHitTestVisible="False"/>
+          </Grid>
+        </StackPanel>
 
         <!-- second user, only in Compare mode -->
         <StackPanel x:Name="UserRowB" Grid.Row="2" Grid.ColumnSpan="3" Margin="0,10,0,0" Visibility="Collapsed">
@@ -1083,6 +1119,8 @@ $guiScript = {
     $compareLink = & $get 'CompareLink'; $userRowB = & $get 'UserRowB'; $userComboB = & $get 'UserComboB'; $userPlaceB = & $get 'UserPlaceholderB'; $colWho = & $get 'ColWho'
     $scopeCombo  = & $get 'ScopeCombo';   $scanBtn   = & $get 'ScanButton'
     $siteRow     = & $get 'SiteRow';      $siteCombo = & $get 'SiteCombo';  $sitePlace = & $get 'SitePlaceholder'
+    $lensUser    = & $get 'LensUser';     $lensSite  = & $get 'LensSite';   $scanSubtitle = & $get 'ScanSubtitle'
+    $userBlock   = & $get 'UserBlock';    $siteRowLabel = & $get 'SiteRowLabel'; $scopeTenantItem = & $get 'ScopeTenantItem'
     $tenantChip  = & $get 'TenantChip';   $chipText  = & $get 'TenantChipText'; $chipIcon = & $get 'TenantChipIcon'
     $settingsBtn = & $get 'SettingsButton'
     $tileRoutes  = & $get 'TileRoutes';   $tileUnexp = & $get 'TileUnexpected'; $tileUnexpCard = & $get 'TileUnexpectedCard'
@@ -2139,6 +2177,49 @@ $guiScript = {
         [void]$compareLink.Inlines.Add($(if ($script:compareMode) { 'Single user' } else { 'Compare two users' }))
     })
 
+    # --- lens: By user (subject = user) <-> By site (subject = site) ----------
+    $script:lens = 'user'
+    $applyLens = {
+        if ($lensSite.IsChecked) {
+            $script:lens = 'site'
+            $scanSubtitle.Text = 'Who can reach a site, and how'
+            $userBlock.Visibility = 'Collapsed'
+            # a site view has no second user - leave compare mode if it was on
+            $script:compareMode = $false
+            $userRowB.Visibility = 'Collapsed'
+            $compareLink.Inlines.Clear(); [void]$compareLink.Inlines.Add('Compare two users')
+            # the site IS the subject: only One site / One site (deep), always shown
+            $scopeTenantItem.Visibility = 'Collapsed'
+            if ($scopeCombo.SelectedIndex -lt 1) { $scopeCombo.SelectedIndex = 1 }
+            # move the site picker into the (now-empty) subject slot, inline with Scope/Scan
+            [System.Windows.Controls.Grid]::SetRow($siteRow, 0)
+            [System.Windows.Controls.Grid]::SetColumn($siteRow, 0)
+            [System.Windows.Controls.Grid]::SetColumnSpan($siteRow, 1)
+            $siteRow.Margin = [System.Windows.Thickness]::new(0, 0, 12, 0)
+            $siteRowLabel.Visibility = 'Visible'
+            $siteRow.Visibility = 'Visible'
+            $scopeNote.Text = "Each row is a principal that can reach the site. Everyone claims and sharing links - access nobody was explicitly given - are surfaced first."
+            $emptyState.Text = 'Connect, pick a site, and run a scan to see who can reach it - and how.'
+            & $loadSites
+        } else {
+            $script:lens = 'user'
+            $scanSubtitle.Text = 'What a user can reach, and how they got there'
+            $userBlock.Visibility = 'Visible'
+            $scopeTenantItem.Visibility = 'Visible'
+            # site picker back to its own full-width row below the user/scope row
+            [System.Windows.Controls.Grid]::SetRow($siteRow, 1)
+            [System.Windows.Controls.Grid]::SetColumn($siteRow, 0)
+            [System.Windows.Controls.Grid]::SetColumnSpan($siteRow, 3)
+            $siteRow.Margin = [System.Windows.Thickness]::new(0, 10, 0, 0)
+            $siteRowLabel.Visibility = 'Collapsed'
+            $siteRow.Visibility = if ($scopeCombo.SelectedIndex -ge 1) { 'Visible' } else { 'Collapsed' }
+            $scopeNote.Text = "Each row is a place this user's access is granted (a route) - not every file they can open."
+            $emptyState.Text = 'Connect, pick a user, and run a scan to see what they can reach - and how.'
+        }
+    }
+    $lensUser.Add_Checked($applyLens)
+    $lensSite.Add_Checked($applyLens)
+
     # --- export --------------------------------------------------------------
     $exportBtn.Add_Click({
         $flat = if ($script:rows) { $script:rows.ToArray() } else { @() }
@@ -2169,6 +2250,13 @@ $guiScript = {
     })
 
     $scanBtn.Add_Click({
+        # By-site scanning is wired in the next step; for now the button stays on the
+        # user lens so nothing runs the wrong engine.
+        if ($script:lens -eq 'site') {
+            $status.Text = 'By-site scanning is coming in the next step - the engine (Get-SiteAccess) is ready.'
+            return
+        }
+
         $selected = $userCombo.SelectedItem
         $user = if ($selected) { $selected.Upn }
                 elseif ("$($userCombo.Text)" -match '@') { "$($userCombo.Text)".Trim() }
