@@ -188,6 +188,16 @@ For each site the engine:
 
 Tenant-wide enumeration skips redirect stubs and the OneDrive/MySite host (not content sites). Every PnP call is wrapped in retry-with-backoff that honours `Retry-After` on throttling (429/503).
 
+If a site still cannot be read after retries, it is skipped (with a warning) rather than aborting the whole scan, and `Get-UserAccess` writes a **non-terminating error** (`FullyQualifiedErrorId` `UserAccessExplorer.IncompleteScan`). That lets you tell a genuine *"no access"* from a scan that simply could not reach some sites — capture it with `-ErrorVariable` and treat the results as partial:
+
+```powershell
+$rows = Get-UserAccess -User jane@contoso.com -TenantWide -TenantAdminUrl $admin `
+            -ClientId $id -Interactive -ErrorVariable skips
+if ($skips | Where-Object FullyQualifiedErrorId -match 'IncompleteScan') {
+    Write-Warning "Results are incomplete - some sites could not be read."
+}
+```
+
 **Going deep** (`-Deep`) extends the same idea below the site. It walks subsites, then only the lists and items that **break inheritance** — the rest inherit their parent's answer, so it never evaluates every item. For each such object it asks two independent questions: *what can this user do here* (direct grants, groups, Everyone claims) and *what sharing links does it carry, and is this user in the audience* — the second is how link-based oversharing, which grants no per-user permission, is found. Effective-permission checks are batched into single round trips to keep item-level affordable.
 
 ---

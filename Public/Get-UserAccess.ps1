@@ -161,6 +161,9 @@ function Get-UserAccess {
     $total = @($targets).Count
     $n = 0
     $emitted = 0
+    # Sites we could not READ (connect/throttle/permission failures). Tracked so an
+    # incomplete scan can be told apart from a genuine "no access" - see below.
+    $skipped = [System.Collections.Generic.List[string]]::new()
 
     # One membership cache for the whole run: a group seen on many sites/objects
     # is resolved against Graph once, not repeatedly.
@@ -188,13 +191,31 @@ function Get-UserAccess {
                 ForEach-Object { $emitted++; $_ }
         }
         catch {
+            $skipped.Add($site)
             Write-Warning "Skipped $site : $($_.Exception.Message)"
         }
     }
 
     Write-Progress -Activity "Checking $User's access" -Completed
 
-    if ($emitted -eq 0) {
+    # A skipped site returned nothing because it could not be READ, not because the
+    # user has no access there. Surface that as a non-terminating error so a caller
+    # can tell an incomplete scan from a genuine "no access" - a throttled site must
+    # never read as a clean result. Rows from the sites that DID respond have already
+    # gone down the pipeline, so callers still get whatever partial results exist.
+    if ($skipped.Count -gt 0) {
+        $msg = "Scan is INCOMPLETE: $($skipped.Count) of $total site(s) could not be read and were skipped ($($skipped -join ', ')). Results cover only the sites that responded."
+        $PSCmdlet.WriteError(
+            [System.Management.Automation.ErrorRecord]::new(
+                [System.InvalidOperationException]::new($msg),
+                'UserAccessExplorer.IncompleteScan',
+                [System.Management.Automation.ErrorCategory]::ResourceUnavailable,
+                $User))
+    }
+
+    # Only claim "no access" when every site actually answered. If some were skipped,
+    # the error above is the honest signal - saying "no access" here would be a lie.
+    if ($emitted -eq 0 -and $skipped.Count -eq 0) {
         $what = if ($OversharedOnly) { 'overshared access' } else { 'access' }
         Write-Information "$User has no $what on the $total site(s) checked." -InformationAction Continue
     }

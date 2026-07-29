@@ -129,6 +129,36 @@ Describe 'Get-UserAccess' {
             "$info" | Should -Match 'no access'
         }
     }
+    It 'signals an INCOMPLETE scan when a site cannot be read - and still returns the sites that worked' {
+        InModuleScope UserAccessExplorer {
+            Mock Connect-IfNeeded {}
+            Mock Get-UserAccessForSite {
+                param($SiteUrl)
+                if ($SiteUrl -match 'bad') { throw 'boom - throttled' }
+                [pscustomobject]@{ User='u'; SiteUrl=$SiteUrl; SiteTitle='S'; EffectiveAccess='Read'; GrantedVia="group 'S Members'"; RouteType='Granted'; Permission='Read' }
+            }
+            $err = $null
+            $rows = Get-UserAccess -User 'jane@contoso.com' -SiteUrls @('https://x/good','https://x/bad') `
+                        -UseExistingConnection -ErrorVariable err -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+            @($rows).Count | Should -Be 1                              # the good site still came back
+            # filter by message (no property access - StrictMode-safe), then confirm
+            # the record carries the stable id a caller keys on to detect partial results
+            $incomplete = @($err | Where-Object { "$_" -match 'INCOMPLETE' })
+            $incomplete | Should -Not -BeNullOrEmpty                    # the skip is not silent
+            $incomplete[0].FullyQualifiedErrorId | Should -Match 'IncompleteScan'
+        }
+    }
+    It 'does NOT signal incomplete, and does say "no access", when every site answers with nothing' {
+        InModuleScope UserAccessExplorer {
+            Mock Connect-IfNeeded {}
+            Mock Get-UserAccessForSite { }   # answers cleanly, just no routes
+            $err = $null
+            $info = Get-UserAccess -User 'jane@contoso.com' -SiteUrl 'https://x/sites/S' `
+                        -UseExistingConnection -ErrorVariable err -ErrorAction SilentlyContinue 6>&1
+            $err | Should -BeNullOrEmpty
+            "$info" | Should -Match 'no access'
+        }
+    }
 }
 
 Describe 'Sharing-link detection' {
