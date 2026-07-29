@@ -73,6 +73,35 @@ $guiScript = {
         }
     }
 
+    # By-site lens: WHO can reach a site. Runs Get-SiteAccess, then adapts each row to
+    # the shape the grid already understands - a display GrantedVia (the principal and
+    # how) and EffectiveAccess (= the permission the route grants) - so $buildRows, the
+    # columns and the view are reused unchanged. The GrantedVia strings are written to
+    # pass through $cleanVia untouched.
+    $script:SiteScanBlock = {
+        param($ModulePath, $Site, $ClientId, $Mode)
+        Import-Module $ModulePath -Force
+        $common = @{ ClientId = $ClientId; Interactive = $true }
+        $rows = switch ($Mode) {
+            'Deep'  { Get-SiteAccess -SiteUrl $Site -Deep -IncludeItems @common }
+            default { Get-SiteAccess -SiteUrl $Site @common }
+        }
+        foreach ($r in $rows) {
+            $mc  = if ($null -ne $r.MemberCount) { "$($r.MemberCount)" } else { '' }
+            $via = switch ("$($r.PrincipalType)") {
+                'Everyone'        { "$($r.Principal)" }
+                'SharingLink'     { "$($r.Principal)" }
+                'SharePointGroup' { "SP group: $($r.Principal)$(if ($mc) { " ($mc)" })" }
+                'EntraGroup'      { "Entra: $($r.Principal)$(if ($mc) { " ($mc)" })" }
+                'User'            { if ($r.Via -and $r.Via -ne 'Direct grant') { "$($r.Principal) (via $($r.Via))" } else { "$($r.Principal)" } }
+                default           { "$($r.Principal)" }
+            }
+            $r | Add-Member -NotePropertyName GrantedVia      -NotePropertyValue $via          -Force
+            $r | Add-Member -NotePropertyName EffectiveAccess -NotePropertyValue $r.Permission -Force
+            $r
+        }
+    }
+
     # Enumerate the tenant's content sites so the One-site picker is a selection,
     # not a URL to type. Same exclusions the module uses (redirect stubs, the
     # OneDrive/MySite host). Runs in the background - a big tenant is slow.
@@ -1537,6 +1566,14 @@ $guiScript = {
             $tileRoutesLabel.Text = 'Shared';        $tileRoutes.Text = "$shared"
             $tileSitesLabel.Text  = "Only $shortA";  $tileSites.Text  = "$onlyA"
             $tileAccessLabel.Text = "Only $shortB";  $tileAccess.Text = "$onlyB"; $tileAccess.Foreground = $window.Resources['Ink']
+        } elseif ($script:lens -eq 'site') {
+            # By site: how many principals reach it, how many are groups, top permission.
+            $tileRoutesLabel.Text = 'Principals';    $tileRoutes.Text = "$($rows.Count)"
+            $groups = @($rows | Where-Object { $_.PrincipalType -eq 'SharePointGroup' -or $_.PrincipalType -eq 'EntraGroup' }).Count
+            $tileSitesLabel.Text  = 'Groups';        $tileSites.Text  = "$groups"
+            $highest = ($rows | Sort-Object @{ e = { & $accessRank $_.Permission } } -Descending | Select-Object -First 1).Permission
+            $tileAccessLabel.Text = 'Highest access'; $tileAccess.Text = if ($highest) { $highest } else { '-' }
+            $tileAccess.Foreground = if ($highest -eq 'Full Control') { $window.Resources['TileDanger'] } elseif ($highest -eq 'Edit') { $brSubtle } else { $window.Resources['Ink'] }
         } else {
             $tileRoutesLabel.Text = 'Routes found';  $tileRoutes.Text = "$($rows.Count)"
             $tileSitesLabel.Text  = 'Sites reached'; $tileSites.Text  = "$(@($rows | Select-Object -ExpandProperty SiteUrl -Unique).Count)"
@@ -2250,40 +2287,47 @@ $guiScript = {
     })
 
     $scanBtn.Add_Click({
-        # By-site scanning is wired in the next step; for now the button stays on the
-        # user lens so nothing runs the wrong engine.
+        # ---- resolve the subject: a user (By user) or a site (By site) ----------
+        $selected = $null; $selectedB = $null; $user = $null; $userB = $null
+
         if ($script:lens -eq 'site') {
-            $status.Text = 'By-site scanning is coming in the next step - the engine (Get-SiteAccess) is ready.'
-            return
+            $siteSel = $siteCombo.SelectedItem
+            $target  = if ($siteSel) { "$($siteSel.Url)" } else { "$($siteCombo.Text)".Trim() }
+            if (-not $target) { $status.Text = 'Pick a site.'; return }
+            $mode = switch ($scopeCombo.SelectedIndex) { 2 { 'Deep' } default { 'Site' } }   # no tenant in by-site
+            $script:isCompare = $false; $script:cmpUserA = ''; $script:cmpUserB = ''
+            $subjectKey = $target
+            $subjectDisplay = if ($siteSel) { "$($siteSel.Display)" } else { $target }
+        } else {
+            $selected = $userCombo.SelectedItem
+            $user = if ($selected) { $selected.Upn }
+                    elseif ("$($userCombo.Text)" -match '@') { "$($userCombo.Text)".Trim() }
+                    else { $null }
+            if (-not $user) { $status.Text = 'Pick a user from the search list first.'; return }
+
+            # second user, only in Compare mode
+            if ($script:compareMode) {
+                $selectedB = $userComboB.SelectedItem
+                $userB = if ($selectedB) { $selectedB.Upn }
+                         elseif ("$($userComboB.Text)" -match '@') { "$($userComboB.Text)".Trim() }
+                         else { $null }
+                if (-not $userB) { $status.Text = 'Compare mode: pick a second user as well.'; return }
+            }
+            # compare bookkeeping (set before the tiles reset so they read it)
+            $script:isCompare = [bool]$userB
+            $script:cmpUserA = if ($selected) { "$($selected.Display)" } else { "$user" }
+            $script:cmpUserB = if ($userB) { if ($selectedB) { "$($selectedB.Display)" } else { "$userB" } } else { '' }
+
+            $mode = switch ($scopeCombo.SelectedIndex) { 0 { 'Tenant' } 2 { 'Deep' } default { 'Site' } }
+            $siteSel = $siteCombo.SelectedItem
+            $target = if ($mode -eq 'Tenant') { $script:adminUrl }
+                      elseif ($siteSel) { "$($siteSel.Url)" }
+                      else { "$($siteCombo.Text)".Trim() }
+            if (-not $target) { $status.Text = if ($mode -eq 'Tenant') { 'Connect first (settings).' } else { 'Pick a site.' }; return }
+            $subjectKey = $user
+            $subjectDisplay = if ($selected) { "$($selected.Display)" } else { "$user" }
         }
-
-        $selected = $userCombo.SelectedItem
-        $user = if ($selected) { $selected.Upn }
-                elseif ("$($userCombo.Text)" -match '@') { "$($userCombo.Text)".Trim() }
-                else { $null }
-        if (-not $user) { $status.Text = 'Pick a user from the search list first.'; return }
-
-        # second user, only in Compare mode
-        $userB = $null; $selectedB = $null
-        if ($script:compareMode) {
-            $selectedB = $userComboB.SelectedItem
-            $userB = if ($selectedB) { $selectedB.Upn }
-                     elseif ("$($userComboB.Text)" -match '@') { "$($userComboB.Text)".Trim() }
-                     else { $null }
-            if (-not $userB) { $status.Text = 'Compare mode: pick a second user as well.'; return }
-        }
-        # compare bookkeeping (set before the tiles reset so they read it)
-        $script:isCompare = [bool]$userB
-        $script:cmpUserA = if ($selected) { "$($selected.Display)" } else { "$user" }
-        $script:cmpUserB = if ($userB) { if ($selectedB) { "$($selectedB.Display)" } else { "$userB" } } else { '' }
-
-        $mode = switch ($scopeCombo.SelectedIndex) { 0 { 'Tenant' } 2 { 'Deep' } default { 'Site' } }
         $isTenant = ($mode -eq 'Tenant')
-        $siteSel = $siteCombo.SelectedItem
-        $target = if ($isTenant) { $script:adminUrl }
-                  elseif ($siteSel) { "$($siteSel.Url)" }
-                  else { "$($siteCombo.Text)".Trim() }
-        if (-not $target) { $status.Text = if ($isTenant) { 'Connect first (settings).' } else { 'Pick a site.' }; return }
 
         $script:rows = New-Object System.Collections.Generic.List[object]
         $script:allRows = @(); $list.ItemsSource = [object[]]@()
@@ -2296,10 +2340,12 @@ $guiScript = {
         $scanBtn.IsEnabled = $false; $exportBtn.IsEnabled = $false
         $progress.Visibility = 'Visible'; $progress.IsIndeterminate = -not $isTenant; $progress.Value = 0
         $stopBtn.Visibility = 'Visible'
-        $status.Text = if ($userB) { "Comparing two users - running both scans, this takes about twice as long..." } elseif ($mode -eq 'Deep') { "Deep scan of $target - walking subsites, lists and items. This can take a while..." } else { "Scanning $user..." }
+        $status.Text = if ($script:lens -eq 'site') { "Scanning who can reach $subjectDisplay..." } elseif ($userB) { "Comparing two users - running both scans, this takes about twice as long..." } elseif ($mode -eq 'Deep') { "Deep scan of $target - walking subsites, lists and items. This can take a while..." } else { "Scanning $user..." }
         # reset the banner colour - a prior compare may have turned it red (guard below)
         $scopeNote.Foreground = [System.Windows.Media.Brush]([System.Windows.Media.BrushConverter]::new().ConvertFromString('#9AA0A6'))
-        $scopeNote.Text = if ($userB) {
+        $scopeNote.Text = if ($script:lens -eq 'site') {
+            "Each row is a principal that can reach the site. Everyone claims and sharing links - access nobody was explicitly given - are surfaced first."
+        } elseif ($userB) {
             "Comparing what each user can reach. Rows are grouped Shared by both / Only one user - the 'User' column shows whose access each route is."
         } elseif ($mode -eq 'Deep') {
             "Deep scan: sites, libraries, folders and items that have their OWN permissions (broken inheritance). Content that inherits is covered by the access shown above it - it is not listed item by item."
@@ -2316,28 +2362,32 @@ $guiScript = {
         # always empty for site-level rows - so hide them and give Site / Grant
         # path the room instead.
         $script:lastMode = $mode
-        $script:lastUser = $user
-        $script:lastUserDisplay = if ($selected) { "$($selected.Display)" } else { "$user" }
+        $script:lastUser = $subjectKey
+        $script:lastUserDisplay = $subjectDisplay
         $script:lastTarget = $target
         $script:lastScopeLabel = switch ($mode) { 'Tenant' { 'Whole tenant' } 'Deep' { 'One site (deep)' } default { 'One site' } }
         $colWho.Visibility = if ($userB) { 'Visible' } else { 'Collapsed' }
         # group by the comparison bucket in compare mode; clear it when leaving compare
         $script:groupField = if ($userB) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
-        if ($mode -eq 'Deep') {
-            # the tree can't express a comparison, so hide it in compare mode
-            $viewToggle.Visibility = if ($userB) { 'Collapsed' } else { 'Visible' }
-            $colObject.Visibility = 'Visible'; $colLocation.Visibility = 'Visible'
-        } else {
-            $viewToggle.Visibility = 'Collapsed'
-            $colObject.Visibility = 'Collapsed'; $colLocation.Visibility = 'Collapsed'
-        }
+        # The tree (Site > Library > Folder > Item) is a user-lens deep concept - it
+        # can express neither a comparison nor a principal list, so it is hidden for
+        # both. Object shows for any deep scan; Location (a breadcrumb) is user-only.
+        $isDeep = ($mode -eq 'Deep')
+        $viewToggle.Visibility  = if ($isDeep -and -not $userB -and $script:lens -ne 'site') { 'Visible' } else { 'Collapsed' }
+        $colObject.Visibility   = if ($isDeep) { 'Visible' } else { 'Collapsed' }
+        $colLocation.Visibility = if ($isDeep -and $script:lens -ne 'site') { 'Visible' } else { 'Collapsed' }
         $viewToggle.IsChecked = $false
 
         $script:bgRs = [runspacefactory]::CreateRunspace(); $script:bgRs.Open()
         $script:bgPs = [powershell]::Create(); $script:bgPs.Runspace = $script:bgRs
-        [void]$script:bgPs.AddScript($script:ScanBlock).
-            AddArgument($script:ModulePath).AddArgument($user).AddArgument($script:clientId).
-            AddArgument($target).AddArgument($mode).AddArgument($userB)
+        if ($script:lens -eq 'site') {
+            [void]$script:bgPs.AddScript($script:SiteScanBlock).
+                AddArgument($script:ModulePath).AddArgument($target).AddArgument($script:clientId).AddArgument($mode)
+        } else {
+            [void]$script:bgPs.AddScript($script:ScanBlock).
+                AddArgument($script:ModulePath).AddArgument($user).AddArgument($script:clientId).
+                AddArgument($target).AddArgument($mode).AddArgument($userB)
+        }
 
         $script:output = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
         $inbuf = New-Object 'System.Management.Automation.PSDataCollection[psobject]'
@@ -2375,14 +2425,17 @@ $guiScript = {
                 & $refreshTiles $script:rows
                 & $applyView
                 # deep results land in the tree; flip to it now that rows are in
-                # (but a compare stays in the grid - the tree has no comparison view)
-                if ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0 -and -not $script:isCompare) { $viewToggle.IsChecked = $true }
+                # (but a compare, or the by-site lens, stays in the grid - the tree
+                # expresses neither a comparison nor a principal list)
+                if ($script:lastMode -eq 'Deep' -and $script:rows.Count -gt 0 -and -not $script:isCompare -and $script:lens -ne 'site') { $viewToggle.IsChecked = $true }
                 & $showView
                 $progress.Visibility = 'Collapsed'; $stopBtn.Visibility = 'Collapsed'
                 $scanBtn.IsEnabled = $true; $exportBtn.IsEnabled = $script:rows.Count -gt 0
 
-                # persist the completed scan so it can be reloaded instantly later
-                if (-not $script:cancelled -and $script:rows.Count -gt 0) {
+                # persist the completed scan so it can be reloaded instantly later.
+                # (by-site scans are not saved yet - a proper site-aware history reload
+                # comes in the next step; saving now would reload with user-lens tiles.)
+                if (-not $script:cancelled -and $script:rows.Count -gt 0 -and $script:lens -ne 'site') {
                     $saveDisplay = if ($script:isCompare) {
                         ("$($script:cmpUserA)" -split ' - ')[0] + '  vs  ' + ("$($script:cmpUserB)" -split ' - ')[0]
                     } else { $script:lastUserDisplay }
@@ -2391,6 +2444,7 @@ $guiScript = {
 
                 $u = @($script:rows | Where-Object { $_.RouteType -eq 'Overshared' }).Count
                 $skipNote = if ($skipped) { " ($skipped site(s) skipped)" } else { "" }
+                $noun = if ($script:lens -eq 'site') { 'principal' } else { 'route' }
 
                 # Compare guard: a transient throttle can leave the SECOND user's deep
                 # scan empty, which then reads as "no access" and would be presented as
@@ -2404,12 +2458,13 @@ $guiScript = {
                     elseif ($cntB -gt 0 -and $cntA -eq 0) { $emptyCmpUser = ("$($script:cmpUserA)" -split ' - ')[0] }
                 }
 
-                if ($script:cancelled) { $status.Text = "Stopped. $($script:rows.Count) route(s) collected, $u overshared." }
+                if ($script:cancelled) { $status.Text = "Stopped. $($script:rows.Count) $noun(s) collected, $u overshared." }
                 elseif ($failMsg -and $script:rows.Count -eq 0) {
                     $emptyState.Text = "Scan failed: $failMsg"; $emptyState.Visibility = 'Visible'; $status.Text = "Failed: $failMsg"
                 }
                 elseif ($script:rows.Count -eq 0) {
-                    $emptyState.Text = 'No access found - this user cannot reach the scanned scope.'; $emptyState.Visibility = 'Visible'
+                    $emptyState.Text = if ($script:lens -eq 'site') { 'No access found on this site.' } else { 'No access found - this user cannot reach the scanned scope.' }
+                    $emptyState.Visibility = 'Visible'
                     $status.Text = 'Done: no access found.'
                 }
                 elseif ($emptyCmpUser) {
@@ -2417,7 +2472,7 @@ $guiScript = {
                     $scopeNote.Foreground = [System.Windows.Media.Brush]$window.Resources['TileDanger']
                     $status.Text = "Done: $($script:rows.Count) route(s), $u overshared$skipNote - $emptyCmpUser had none (re-run if unexpected)."
                 }
-                else { $status.Text = "Done: $($script:rows.Count) route(s), $u overshared$skipNote." }
+                else { $status.Text = "Done: $($script:rows.Count) $noun(s), $u overshared$skipNote." }
             }
         })
         $script:timer.Start()
