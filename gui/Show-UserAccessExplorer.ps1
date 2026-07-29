@@ -1665,6 +1665,18 @@ $guiScript = {
         catch { Write-Verbose "settings load skipped: $($_.Exception.Message)" }
         return $null
     }
+    # StrictMode throws on a property that is not there, and settings.json is read
+    # for BOTH shapes: 0.2.x wrote a singular ClientId/AdminUrl, 0.3.x writes the
+    # ClientIds/AdminUrls arrays. Naming the absent one directly killed the window
+    # on the second launch - the first run has no file at all, so it only bit once
+    # settings had been saved. Ask the object whether it has the property instead.
+    $prop = {
+        param($Object, $Name)
+        if ($null -eq $Object) { return $null }
+        $p = $Object.PSObject.Properties[$Name]
+        if ($p) { return $p.Value }
+        return $null
+    }
     # Keep a short most-recent-first history of each, so admins juggling several
     # tenants / app registrations pick from a dropdown instead of retyping.
     $saveSettings = {
@@ -1673,8 +1685,8 @@ $guiScript = {
             $existing = & $loadSettings
             $priorC = @(); $priorA = @()
             if ($existing) {
-                $priorC = @(@($existing.ClientIds) + @($existing.ClientId))   # new arrays + old single value
-                $priorA = @(@($existing.AdminUrls) + @($existing.AdminUrl))
+                $priorC = @(@(& $prop $existing 'ClientIds') + @(& $prop $existing 'ClientId'))   # new arrays + old single value
+                $priorA = @(@(& $prop $existing 'AdminUrls') + @(& $prop $existing 'AdminUrl'))
             }
             $clients = @(@($ClientId) + @($priorC | Where-Object { $_ -and $_ -ne $ClientId }) | Where-Object { $_ } | Select-Object -First 10)
             $admins  = @(@($AdminUrl)  + @($priorA | Where-Object { $_ -and $_ -ne $AdminUrl })  | Where-Object { $_ } | Select-Object -First 10)
@@ -2056,8 +2068,8 @@ $guiScript = {
     # fill the dropdowns with the remembered history; pre-select the most recent
     $saved = & $loadSettings
     if ($saved) {
-        $clientHist = @(@($saved.ClientIds) + @($saved.ClientId) | Where-Object { $_ })
-        $adminHist  = @(@($saved.AdminUrls) + @($saved.AdminUrl)  | Where-Object { $_ })
+        $clientHist = @(@(& $prop $saved 'ClientIds') + @(& $prop $saved 'ClientId') | Where-Object { $_ })
+        $adminHist  = @(@(& $prop $saved 'AdminUrls') + @(& $prop $saved 'AdminUrl')  | Where-Object { $_ })
         if ($clientHist.Count) { $pClient.ItemsSource = $clientHist; $pClient.SelectedIndex = 0 }
         if ($adminHist.Count)  { $pAdmin.ItemsSource  = $adminHist;  $pAdmin.SelectedIndex = 0 }
     }
