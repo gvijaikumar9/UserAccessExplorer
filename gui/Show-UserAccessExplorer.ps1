@@ -96,8 +96,15 @@ $guiScript = {
                 'User'            { if ($r.Via -and $r.Via -ne 'Direct grant') { "$($r.Principal) (via $($r.Via))" } else { "$($r.Principal)" } }
                 default           { "$($r.Principal)" }
             }
-            $r | Add-Member -NotePropertyName GrantedVia      -NotePropertyValue $via          -Force
-            $r | Add-Member -NotePropertyName EffectiveAccess -NotePropertyValue $r.Permission -Force
+            # "Limited Access" is plumbing - drop it for display when a real role is
+            # also present, so the Permission column reads "Full Control" not
+            # "Full Control, Limited Access".
+            $perm = "$($r.Permission)"
+            if ($perm -match ',' -and $perm -match 'Full Control|Contribute|Design|Edit|Read|View') {
+                $perm = (@($perm -split ',\s*') | Where-Object { $_ -and $_ -ne 'Limited Access' }) -join ', '
+            }
+            $r | Add-Member -NotePropertyName GrantedVia      -NotePropertyValue $via   -Force
+            $r | Add-Member -NotePropertyName EffectiveAccess -NotePropertyValue $perm  -Force
             $r
         }
     }
@@ -1211,7 +1218,15 @@ $guiScript = {
         if ($grantedVia -match "^Entra group '(.+?)'")      { return $matches[1] }
         return $grantedVia
     }
-    $accessRank = { param($a) switch ($a) { 'Full Control' {3} 'Edit' {2} 'Read' {1} default {0} } }
+    # Rank an access level. Match, not equality: a principal can hold several role
+    # bindings at once (e.g. "Full Control, Limited Access"), so take the highest tier
+    # present. Clean single values ("Edit") still match exactly.
+    $accessRank = { param($a)
+        if     ("$a" -match 'Full Control')          { 3 }
+        elseif ("$a" -match 'Edit|Contribute|Design'){ 2 }
+        elseif ("$a" -match 'Read|View')             { 1 }
+        else                                         { 0 }
+    }
 
     # --- turn flat routes into site-grouped view models ----------------------
     $script:allGroups = @()
@@ -1595,9 +1610,10 @@ $guiScript = {
             $tileRoutesLabel.Text = 'Principals';    $tileRoutes.Text = "$($rows.Count)"
             $groups = @($rows | Where-Object { $_.PrincipalType -eq 'SharePointGroup' -or $_.PrincipalType -eq 'EntraGroup' }).Count
             $tileSitesLabel.Text  = 'Groups';        $tileSites.Text  = "$groups"
-            $highest = ($rows | Sort-Object @{ e = { & $accessRank $_.Permission } } -Descending | Select-Object -First 1).Permission
-            $tileAccessLabel.Text = 'Highest access'; $tileAccess.Text = if ($highest) { $highest } else { '-' }
-            $tileAccess.Foreground = if ($highest -eq 'Full Control') { $window.Resources['TileDanger'] } elseif ($highest -eq 'Edit') { $brSubtle } else { $window.Resources['Ink'] }
+            $top = -1; foreach ($rr in $rows) { $rk = & $accessRank $rr.Permission; if ($rk -gt $top) { $top = $rk } }
+            $highest = switch ($top) { 3 { 'Full Control' } 2 { 'Edit' } 1 { 'Read' } 0 { 'Limited' } default { '-' } }
+            $tileAccessLabel.Text = 'Highest access'; $tileAccess.Text = $highest
+            $tileAccess.Foreground = if ($top -ge 3) { $window.Resources['TileDanger'] } elseif ($top -eq 2) { $brSubtle } else { $window.Resources['Ink'] }
         } else {
             $tileRoutesLabel.Text = 'Routes found';  $tileRoutes.Text = "$($rows.Count)"
             $tileSitesLabel.Text  = 'Sites reached'; $tileSites.Text  = "$(@($rows | Select-Object -ExpandProperty SiteUrl -Unique).Count)"
