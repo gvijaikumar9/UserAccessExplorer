@@ -14,6 +14,7 @@
 
     FunctionsToExport = @(
         'Get-UserAccess'
+        'Get-SiteAccess'
         'Export-UserAccessReport'
     )
     CmdletsToExport   = @()

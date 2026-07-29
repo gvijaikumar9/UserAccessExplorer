@@ -6,12 +6,12 @@ BeforeAll {
 }
 
 Describe 'Module surface' {
-    It 'exports the two public functions' {
+    It 'exports the public functions' {
         (Get-Command -Module UserAccessExplorer).Name | Sort-Object |
-            Should -Be @('Export-UserAccessReport', 'Get-UserAccess')
+            Should -Be @('Export-UserAccessReport', 'Get-SiteAccess', 'Get-UserAccess')
     }
     It 'public functions have help' {
-        foreach ($fn in 'Get-UserAccess','Export-UserAccessReport') {
+        foreach ($fn in 'Get-UserAccess','Get-SiteAccess','Export-UserAccessReport') {
             (Get-Help $fn).Synopsis | Should -Not -BeNullOrEmpty
         }
     }
@@ -157,6 +157,76 @@ Describe 'Get-UserAccess' {
                         -UseExistingConnection -ErrorVariable err -ErrorAction SilentlyContinue 6>&1
             $err | Should -BeNullOrEmpty
             "$info" | Should -Match 'no access'
+        }
+    }
+}
+
+Describe 'Site-centric classification (Get-PrincipalClassification)' {
+    It 'flags an Everyone claim as Overshared' {
+        InModuleScope UserAccessExplorer {
+            $c = Get-PrincipalClassification -PrincipalType 'SecurityGroup' -LoginName 'c:0(.s|true' -Title 'Everyone'
+            $c.Kind | Should -Be 'Everyone'; $c.RouteType | Should -Be 'Overshared'
+        }
+    }
+    It 'flags Everyone-except-external as Overshared' {
+        InModuleScope UserAccessExplorer {
+            $c = Get-PrincipalClassification -PrincipalType 'SecurityGroup' -LoginName 'c:0-.f|rolemanager|spo-grid-all-users/abc' -Title 'Everyone except external users'
+            $c.Kind | Should -Be 'Everyone'; $c.RouteType | Should -Be 'Overshared'
+        }
+    }
+    It 'flags a sharing-link group as Overshared and labels it a sharing link' {
+        InModuleScope UserAccessExplorer {
+            $c = Get-PrincipalClassification -PrincipalType 'SharePointGroup' -LoginName '' -Title 'SharingLinks.abc.Flexible.def'
+            $c.Kind | Should -Be 'SharingLink'; $c.RouteType | Should -Be 'Overshared'
+            $c.Display | Should -Match 'Sharing link'
+        }
+    }
+    It 'classifies a direct user as Granted' {
+        InModuleScope UserAccessExplorer {
+            (Get-PrincipalClassification -PrincipalType 'User' -LoginName 'i:0#.f|membership|jane@contoso.com' -Title 'Jane').Kind | Should -Be 'User'
+        }
+    }
+    It 'classifies a SharePoint group as Granted' {
+        InModuleScope UserAccessExplorer {
+            (Get-PrincipalClassification -PrincipalType 'SharePointGroup' -LoginName 'Sales Members' -Title 'Sales Members').Kind | Should -Be 'SharePointGroup'
+        }
+    }
+    It 'classifies an Entra security group as Granted' {
+        InModuleScope UserAccessExplorer {
+            (Get-PrincipalClassification -PrincipalType 'SecurityGroup' -LoginName 'c:0t.c|tenant|8a1c2f3e-4b5d-6e7f-8a9b-0c1d2e3f4a5b' -Title 'HR Team').Kind | Should -Be 'EntraGroup'
+        }
+    }
+}
+
+Describe 'Get-SiteAccess' {
+    It 'filters to Overshared with -OversharedOnly (and the -UnexpectedOnly alias)' {
+        InModuleScope UserAccessExplorer {
+            Mock Connect-IfNeeded {}
+            Mock Get-SiteAccessForWeb {
+                [pscustomobject]@{ SiteUrl='x'; Principal='Everyone'; PrincipalType='Everyone'; RouteType='Overshared'; Permission='Read' }
+                [pscustomobject]@{ SiteUrl='x'; Principal='Sales Members'; PrincipalType='SharePointGroup'; RouteType='Granted'; Permission='Edit' }
+            }
+            $r = Get-SiteAccess -SiteUrl 'https://x/sites/S' -UseExistingConnection -OversharedOnly
+            @($r).Count | Should -Be 1
+            $r.RouteType | Should -Be 'Overshared'
+            (Get-SiteAccess -SiteUrl 'https://x/sites/S' -UseExistingConnection -UnexpectedOnly).RouteType | Should -Be 'Overshared'
+        }
+    }
+    It 'signals an INCOMPLETE scan when a site cannot be read - and still returns the sites that worked' {
+        InModuleScope UserAccessExplorer {
+            Mock Connect-IfNeeded {}
+            Mock Get-SiteAccessForWeb {
+                param($WebUrl)
+                if ($WebUrl -match 'bad') { throw 'boom' }
+                [pscustomobject]@{ SiteUrl=$WebUrl; Principal='Sales Members'; PrincipalType='SharePointGroup'; RouteType='Granted'; Permission='Edit' }
+            }
+            $err = $null
+            $rows = Get-SiteAccess -SiteUrls @('https://x/good','https://x/bad') `
+                        -UseExistingConnection -ErrorVariable err -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+            @($rows).Count | Should -Be 1
+            $incomplete = @($err | Where-Object { "$_" -match 'INCOMPLETE' })
+            $incomplete | Should -Not -BeNullOrEmpty
+            $incomplete[0].FullyQualifiedErrorId | Should -Match 'IncompleteScan'
         }
     }
 }
