@@ -1073,6 +1073,10 @@ $guiScript = {
                       <TextBlock Text="{Binding UserDisplay}" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
                       <TextBlock Text="  &#xB7;  " Foreground="{DynamicResource Subtle}"/>
                       <TextBlock Text="{Binding ScopeDisplay}" Foreground="{DynamicResource Subtle}"/>
+                      <Border CornerRadius="4" Padding="6,1,6,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                              Background="{DynamicResource TileBg}" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1">
+                        <TextBlock Text="{Binding LensLabel}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Subtle}"/>
+                      </Border>
                     </StackPanel>
                     <TextBlock Text="{Binding TargetUrl}" FontSize="11" Foreground="#9AA0A6" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" ToolTip="{Binding Target}">
                       <TextBlock.Style>
@@ -1085,7 +1089,7 @@ $guiScript = {
                     </TextBlock>
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                       <TextBlock Text="{Binding When}" FontSize="12" Foreground="#9AA0A6"/>
-                      <TextBlock Text="{Binding RouteCount, StringFormat='   &#xB7;   {0} routes'}" FontSize="12" Foreground="#9AA0A6"/>
+                      <TextBlock Text="{Binding CountLabel, StringFormat='   &#xB7;   {0}'}" FontSize="12" Foreground="#9AA0A6"/>
                       <TextBlock Text="{Binding OversharedCount, StringFormat=', {0} overshared'}" FontSize="12" Foreground="{DynamicResource TileDanger}"/>
                     </StackPanel>
                   </StackPanel>
@@ -1739,6 +1743,9 @@ $guiScript = {
                     $j | Add-Member -NotePropertyName ScopeDisplay -NotePropertyValue (& $scopeDisplayFor $j.ScopeLabel $j.Target) -Force
                     $j | Add-Member -NotePropertyName TargetUrl    -NotePropertyValue $(if ("$($j.ScopeLabel)" -eq 'Whole tenant') { 'All sites in the tenant' } elseif ("$($j.Target)") { "$($j.Target)" } else { '' }) -Force
                     $j | Add-Member -NotePropertyName _Path        -NotePropertyValue $_.FullName                           -Force
+                    $isSiteScan = (($j.PSObject.Properties.Name -contains 'IsSite') -and [bool]$j.IsSite)
+                    $j | Add-Member -NotePropertyName LensLabel  -NotePropertyValue $(if ($isSiteScan) { 'By site' } else { 'By user' }) -Force
+                    $j | Add-Member -NotePropertyName CountLabel -NotePropertyValue "$($j.RouteCount) $(if ($isSiteScan) { 'principals' } else { 'routes' })" -Force
                     $j
                 } catch { Write-Verbose "skipped unreadable scan file: $($_.Exception.Message)" }
             })
