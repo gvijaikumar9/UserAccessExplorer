@@ -8,10 +8,10 @@ BeforeAll {
 Describe 'Module surface' {
     It 'exports the public functions' {
         (Get-Command -Module UserAccessExplorer).Name | Sort-Object |
-            Should -Be @('Export-UserAccessReport', 'Get-SiteAccess', 'Get-UserAccess')
+            Should -Be @('Export-UserAccessReport', 'Get-SiteAccess', 'Get-UserAccess', 'Show-UserAccessExplorer')
     }
     It 'public functions have help' {
-        foreach ($fn in 'Get-UserAccess','Get-SiteAccess','Export-UserAccessReport') {
+        foreach ($fn in 'Get-UserAccess','Get-SiteAccess','Export-UserAccessReport','Show-UserAccessExplorer') {
             (Get-Help $fn).Synopsis | Should -Not -BeNullOrEmpty
         }
     }

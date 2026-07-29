@@ -1,6 +1,6 @@
 @{
     RootModule        = 'UserAccessExplorer.psm1'
-    ModuleVersion     = '0.3.0'
+    ModuleVersion     = '0.3.1'
     GUID              = 'e2c9a7d4-3f81-4b6a-9d02-7c5e1a4f8b93'
     Author            = 'G Vijai Kumar'
     CompanyName       = 'Five Number'
@@ -16,6 +16,7 @@
         'Get-UserAccess'
         'Get-SiteAccess'
         'Export-UserAccessReport'
+        'Show-UserAccessExplorer'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
@@ -26,7 +27,7 @@
             Tags         = @('SharePoint','SharePointOnline','Microsoft365','PnP','Permissions','Security','Governance','Copilot','Oversharing','AccessReview')
             LicenseUri   = 'https://opensource.org/licenses/MIT'
             ProjectUri   = 'https://github.com/gvijaikumar9/UserAccessExplorer'
-            ReleaseNotes = 'v0.3.0. By site (Get-SiteAccess): the mirror of Get-UserAccess - fix a site and report every principal that can reach it (user, SharePoint group, Entra group, Everyone claim, sharing link), Granted vs Overshared, with SharePoint- and Entra-group member counts (Graph transitive members) and -ExpandMembers for one row per person; -Deep walks subsites/lists/items with broken inheritance. The GUI has a By user / By site lens toggle with dedicated Who/Type/Members/Permission columns and site-aware Scan history. Compare two users: add a second user and the scan runs both, then diffs them into Shared by both / Only-A / Only-B, with a User column and matching tiles; compare runs save to Scan history. Correctness: a site that cannot be read after retries is now surfaced as a non-terminating error (FullyQualifiedErrorId UserAccessExplorer.IncompleteScan) so an incomplete scan is no longer mistaken for genuine "no access" - callers capture it with -ErrorVariable and still receive the rows from sites that responded. GUI: a collapsible navigation rail (Scan / Scan history, renamed from Saved scans; the redundant overflow menu and rail Settings were removed), an About panel with the running version and a Check for updates button (GitHub Releases), scan-history and report cards that show the site each scan covered, and a full light/dark theme. Prior (v0.2.0): Granted/Overshared terminology (Microsoft''s governance words; -UnexpectedOnly aliases -OversharedOnly), Graph-confirmed Entra/M365 group membership (transitive checkMemberGroups), PermUrl deep-links to each object''s advanced-permissions page, deep item-level scanning and the Site > Library > Folder > Item tree.'
+            ReleaseNotes = 'v0.3.1. Fixes a crash that stopped the desktop window opening on the SECOND launch and later: settings.json is read for both shapes (0.2.x wrote a singular ClientId/AdminUrl, 0.3.x writes ClientIds/AdminUrls arrays) and naming the absent property threw under StrictMode, so the window died before it appeared - the first run was fine because no settings file existed yet. Property reads now go through a presence check. Also adds Show-UserAccessExplorer as an exported command: the GUI was previously only reachable by running gui/Show-UserAccessExplorer.ps1 by path, which nobody installing from the Gallery could find. Install-Module, then Show-UserAccessExplorer. v0.3.0. By site (Get-SiteAccess): the mirror of Get-UserAccess - fix a site and report every principal that can reach it (user, SharePoint group, Entra group, Everyone claim, sharing link), Granted vs Overshared, with SharePoint- and Entra-group member counts (Graph transitive members) and -ExpandMembers for one row per person; -Deep walks subsites/lists/items with broken inheritance. The GUI has a By user / By site lens toggle with dedicated Who/Type/Members/Permission columns and site-aware Scan history. Compare two users: add a second user and the scan runs both, then diffs them into Shared by both / Only-A / Only-B, with a User column and matching tiles; compare runs save to Scan history. Correctness: a site that cannot be read after retries is now surfaced as a non-terminating error (FullyQualifiedErrorId UserAccessExplorer.IncompleteScan) so an incomplete scan is no longer mistaken for genuine "no access" - callers capture it with -ErrorVariable and still receive the rows from sites that responded. GUI: a collapsible navigation rail (Scan / Scan history, renamed from Saved scans; the redundant overflow menu and rail Settings were removed), an About panel with the running version and a Check for updates button (GitHub Releases), scan-history and report cards that show the site each scan covered, and a full light/dark theme. Prior (v0.2.0): Granted/Overshared terminology (Microsoft''s governance words; -UnexpectedOnly aliases -OversharedOnly), Graph-confirmed Entra/M365 group membership (transitive checkMemberGroups), PermUrl deep-links to each object''s advanced-permissions page, deep item-level scanning and the Site > Library > Folder > Item tree.'
         }
     }
 }
