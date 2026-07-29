@@ -894,7 +894,18 @@ $guiScript = {
                 <Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
               </DataGridTextColumn.ElementStyle>
             </DataGridTextColumn>
-            <DataGridTemplateColumn Header="Site" Width="220" SortMemberPath="SiteTitle">
+            <!-- by-site only: principal type + member count -->
+            <DataGridTextColumn x:Name="ColPType" Header="Type" Binding="{Binding PType}" Width="140" SortMemberPath="PType" Visibility="Collapsed">
+              <DataGridTextColumn.ElementStyle>
+                <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Subtle}"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+              </DataGridTextColumn.ElementStyle>
+            </DataGridTextColumn>
+            <DataGridTextColumn x:Name="ColMembers" Header="Members" Binding="{Binding MembersText}" Width="80" SortMemberPath="MembersNum" Visibility="Collapsed">
+              <DataGridTextColumn.ElementStyle>
+                <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Subtle}"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+              </DataGridTextColumn.ElementStyle>
+            </DataGridTextColumn>
+            <DataGridTemplateColumn x:Name="ColSite" Header="Site" Width="220" SortMemberPath="SiteTitle">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate>
                   <DockPanel LastChildFill="True" ToolTip="{Binding SiteUrl}">
@@ -926,12 +937,20 @@ $guiScript = {
                 </Style>
               </DataGridTextColumn.ElementStyle>
             </DataGridTextColumn>
-            <DataGridTextColumn Header="Grant path" Binding="{Binding GrantPath}" Width="*" MinWidth="200" SortMemberPath="GrantPath">
+            <DataGridTextColumn x:Name="ColGrantPath" Header="Grant path" Binding="{Binding GrantPath}" Width="*" MinWidth="200" SortMemberPath="GrantPath">
               <DataGridTextColumn.ElementStyle>
                 <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
               </DataGridTextColumn.ElementStyle>
             </DataGridTextColumn>
-            <DataGridTextColumn Header="Effective" Binding="{Binding Effective}" Width="120" SortMemberPath="Effective"/>
+            <DataGridTextColumn x:Name="ColEffective" Header="Effective" Binding="{Binding Effective}" Width="120" SortMemberPath="Effective"/>
+            <!-- by-site only: open this object's permissions page (same button the Site column carries) -->
+            <DataGridTemplateColumn x:Name="ColManage" Header="" Width="44" Visibility="Collapsed">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <Button x:Name="PermButton" Style="{StaticResource OpenPermBtn}" HorizontalAlignment="Center"/>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
           </DataGrid.Columns>
         </DataGrid>
 
@@ -1159,6 +1178,8 @@ $guiScript = {
     $exportBtn = & $get 'ExportButton'
     $viewToggle = & $get 'ViewToggle'; $resultsTree = & $get 'ResultsTree'; $scopeNote = & $get 'ScopeNote'
     $colObject = & $get 'ColObject'; $colLocation = & $get 'ColLocation'; $oversharedToggle = & $get 'OversharedToggle'
+    $colSite = & $get 'ColSite'; $colGrantPath = & $get 'ColGrantPath'; $colEffective = & $get 'ColEffective'
+    $colPType = & $get 'ColPType'; $colMembers = & $get 'ColMembers'; $colManage = & $get 'ColManage'
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
     $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $themeToggle = & $get 'ThemeToggle'
     $versionButton = & $get 'VersionButton'; $versionText = & $get 'VersionText'; $updateBadge = & $get 'UpdateBadge'
@@ -1255,7 +1276,10 @@ $guiScript = {
                 Location     = $location
                 GrantPath    = if ($r.Permission) { "$via -> $($r.Permission)" } else { "$via" }
                 Effective    = $r.EffectiveAccess
-                Who          = if ($script:isCompare) { if ("$($r.CmpUser)" -eq 'B') { $shortB } else { $shortA } } else { '' }
+                Who          = if ($script:lens -eq 'site') { "$($r.Principal)" } elseif ($script:isCompare) { if ("$($r.CmpUser)" -eq 'B') { $shortB } else { $shortA } } else { '' }
+                PType        = if ($script:lens -eq 'site') { switch ("$($r.PrincipalType)") { 'User' { 'User' } 'SharePointGroup' { 'SharePoint group' } 'EntraGroup' { 'Entra group' } 'Everyone' { 'Everyone' } 'SharingLink' { 'Sharing link' } default { 'Other' } } } else { '' }
+                MembersText  = if ($script:lens -eq 'site' -and ($r.PSObject.Properties.Name -contains 'MemberCount') -and $null -ne $r.MemberCount) { "$($r.MemberCount)" } else { '' }
+                MembersNum   = if ($script:lens -eq 'site' -and ($r.PSObject.Properties.Name -contains 'MemberCount') -and $null -ne $r.MemberCount) { [int]$r.MemberCount } else { -1 }
                 CompareStatus = if ($script:isCompare) {
                                     $k = & $keyFor $r
                                     if ($setA.ContainsKey($k) -and $setB.ContainsKey($k)) { 'Shared by both' }
@@ -2366,16 +2390,27 @@ $guiScript = {
         $script:lastUserDisplay = $subjectDisplay
         $script:lastTarget = $target
         $script:lastScopeLabel = switch ($mode) { 'Tenant' { 'Whole tenant' } 'Deep' { 'One site (deep)' } default { 'One site' } }
-        $colWho.Visibility = if ($userB) { 'Visible' } else { 'Collapsed' }
+        # ---- columns per lens -----------------------------------------------
+        $isSite = ($script:lens -eq 'site')
+        $isDeep = ($mode -eq 'Deep')
+        # Who column: the principal (by site) or the compared user (compare mode)
+        $colWho.Visibility = if ($isSite -or $userB) { 'Visible' } else { 'Collapsed' }
+        $colWho.Header     = if ($isSite) { 'Who' } else { 'User' }
+        # by-site dedicated columns (Type / Members / a Manage button)
+        $colPType.Visibility   = if ($isSite) { 'Visible' } else { 'Collapsed' }
+        $colMembers.Visibility = if ($isSite) { 'Visible' } else { 'Collapsed' }
+        $colManage.Visibility  = if ($isSite) { 'Visible' } else { 'Collapsed' }
+        # user columns hidden in by-site (principal + type carry the "how")
+        $colSite.Visibility      = if ($isSite) { 'Collapsed' } else { 'Visible' }
+        $colGrantPath.Visibility = if ($isSite) { 'Collapsed' } else { 'Visible' }
+        $colEffective.Header     = if ($isSite) { 'Permission' } else { 'Effective' }
+        # Object shows for any deep scan; Location (a breadcrumb) is user-only
+        $colObject.Visibility   = if ($isDeep) { 'Visible' } else { 'Collapsed' }
+        $colLocation.Visibility = if ($isDeep -and -not $isSite) { 'Visible' } else { 'Collapsed' }
         # group by the comparison bucket in compare mode; clear it when leaving compare
         $script:groupField = if ($userB) { 'CompareStatus' } elseif ($script:groupField -eq 'CompareStatus') { $null } else { $script:groupField }
-        # The tree (Site > Library > Folder > Item) is a user-lens deep concept - it
-        # can express neither a comparison nor a principal list, so it is hidden for
-        # both. Object shows for any deep scan; Location (a breadcrumb) is user-only.
-        $isDeep = ($mode -eq 'Deep')
-        $viewToggle.Visibility  = if ($isDeep -and -not $userB -and $script:lens -ne 'site') { 'Visible' } else { 'Collapsed' }
-        $colObject.Visibility   = if ($isDeep) { 'Visible' } else { 'Collapsed' }
-        $colLocation.Visibility = if ($isDeep -and $script:lens -ne 'site') { 'Visible' } else { 'Collapsed' }
+        # The tree can express neither a comparison nor a principal list - hide for both
+        $viewToggle.Visibility  = if ($isDeep -and -not $userB -and -not $isSite) { 'Visible' } else { 'Collapsed' }
         $viewToggle.IsChecked = $false
 
         $script:bgRs = [runspacefactory]::CreateRunspace(); $script:bgRs.Open()
