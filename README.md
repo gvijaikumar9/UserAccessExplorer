@@ -127,6 +127,25 @@ carries and whether the user falls inside the link's audience. Because each
 shared file is a separate Graph lookup, deep scans are slow — run them on sites
 you care about, not across a whole tenant.
 
+**Who can reach a site — the mirror question:** `Get-SiteAccess` fixes a *site*
+and reports every principal that can reach it — a user, a SharePoint group, an
+Entra group, an Everyone claim, or a sharing link — each classified **Granted**
+or **Overshared**, with groups expanded to a member count.
+
+```powershell
+Get-SiteAccess -SiteUrl $site -ClientId $appId -Interactive -Deep -OversharedOnly
+
+# -ExpandMembers turns each group into one row per person -
+# the full list of who can actually reach it
+Get-SiteAccess -SiteUrl $site -ClientId $appId -Interactive -ExpandMembers
+```
+
+It uses the same broken-inheritance `-Deep -IncludeItems` walk and the same
+incomplete-scan signalling as `Get-UserAccess`. Entra-group member counts come
+from Graph (`GroupMember.Read.All`). Rows carry `Principal`, `PrincipalType`
+(User / SharePointGroup / EntraGroup / Everyone / SharingLink), `MemberCount`,
+`Permission`, `RouteType`, and the object/`PermUrl` fields.
+
 **Export a report** (self-contained HTML, Overshared section first — or CSV):
 
 ```powershell
@@ -167,6 +186,8 @@ pwsh -File .\gui\Show-UserAccessExplorer.ps1
 Results are a **sortable, groupable grid** — one row per route, with the **Overshared** ones grouped to the top and each grant path shown with its route (`Everyone claim → read`, `Sharing link → view`, and so on). Click a column header to sort; use the header chevron to group or filter by any column. Four tiles summarize the whole scan at a glance — Routes found, **Overshared**, Sites reached, Highest access. Filter with the search box, flip **Overshared only** to see just the risky routes, switch to the **Tree view** to see the Site → Library → Folder → Item hierarchy (single-user deep scans), and **Export** to HTML or CSV. Every object row (and tree node) has an **open-permissions button** that jumps straight to that object's **advanced-permissions page** in SharePoint (site / list / item). For an item that carries a sharing link, that page also shows the link and a **"manage links"** action, so it's the one-click route to revoke.
 
 **Compare two users.** Switch the **Single user** control to add a second user, and the scan runs both, then diffs them: rows are grouped **Shared by both**, **Only** the first user, and **Only** the second, with a **User** column showing whose access each route is, and the tiles switch to Shared / Only-A / Only-B counts. Good for "give the new starter the same access as her manager" — you see exactly where the two differ before copying anything. Compare runs are saved to Scan history like any other. (The Tree view is hidden in compare mode; a hierarchy can't express a two-user diff.)
+
+**By user or by site.** The header has a **By user / By site** toggle. *By site* flips the subject: pick a **site** instead of a user, and every row becomes a **principal that can reach it** — with **Who** (the principal), **Type** (SharePoint group / Entra group / Everyone / Sharing link / User), **Members** (the group's member count), **Permission**, and a **Manage** button, Overshared-first. Run it *deep* and it walks down to the subsites, libraries and files with their own permissions, so a document shared with **Everyone** three folders down gets its own row. Tiles switch to **Principals / Overshared / Groups / Highest access**. By-site scans save to Scan history too (each history card is badged **By site** or **By user**).
 
 The scan runs on a background runspace so the window stays responsive on tenant-wide sweeps.
 
