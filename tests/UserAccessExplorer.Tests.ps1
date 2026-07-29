@@ -415,3 +415,27 @@ Describe 'Deep scan guards (connection)' {
             Should -Throw '*subsites are connected to individually*'
     }
 }
+
+Describe 'Site-centric deep' {
+    It 'refuses -IncludeItems without -Deep' {
+        { Get-SiteAccess -SiteUrl 'https://x' -IncludeItems -UseExistingConnection } |
+            Should -Throw '*-IncludeItems only means something with -Deep*'
+    }
+    It 'refuses -Deep with -UseExistingConnection' {
+        { Get-SiteAccess -SiteUrl 'https://x' -Deep -UseExistingConnection } |
+            Should -Throw '*subsites are connected to individually*'
+    }
+    It 'routes -Deep to the deep engine and passes its rows through' {
+        InModuleScope UserAccessExplorer {
+            Mock Connect-IfNeeded {}
+            Mock Get-SiteAccessForWeb { throw 'should not be called for a deep scan' }
+            Mock Get-SiteAccessDeep {
+                [pscustomobject]@{ SiteUrl='x'; Principal='Sharing link (Flexible)'; PrincipalType='SharingLink'; RouteType='Overshared'; Permission='Read'; ObjectKind='File' }
+            }
+            $r = Get-SiteAccess -SiteUrl 'https://x/sites/S' -Deep -ClientId 'id' -Interactive
+            $r.ObjectKind | Should -Be 'File'
+            $r.PrincipalType | Should -Be 'SharingLink'
+            Should -Invoke Get-SiteAccessDeep -Times 1 -Exactly
+        }
+    }
+}

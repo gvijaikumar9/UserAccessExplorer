@@ -34,6 +34,20 @@ function Get-SiteAccess {
         site. Without it, each group is a single row with a member count. Needs Graph
         GroupMember.Read.All to resolve Entra groups.
 
+    .PARAMETER Deep
+        Walk below the site - subsites, then the lists and items that have their OWN
+        permissions - and report who can reach each. Only objects that break
+        inheritance are examined, which is exactly where oversharing (a sharing link,
+        a one-off Everyone grant) lives. Add -IncludeItems to descend to files/items.
+
+    .PARAMETER IncludeItems
+        With -Deep, descend to individual items and files. The expensive level: every
+        list is paged once to find which items broke inheritance.
+
+    .PARAMETER MaxItemsPerList
+        Stop after this many items in any one list (a warning names the list when it
+        truncates). 0 (the default) means no cap.
+
     .PARAMETER ClientId
         Entra ID app registration client ID. Not needed with -UseExistingConnection.
 
@@ -57,6 +71,10 @@ function Get-SiteAccess {
 
         [switch]   $ExpandMembers,
 
+        [switch]   $Deep,
+        [switch]   $IncludeItems,
+        [int]      $MaxItemsPerList = 0,
+
         [string]       $ClientId,
         [string]       $Tenant,
         [string]       $CertificatePath,
@@ -66,6 +84,15 @@ function Get-SiteAccess {
         [switch]       $ManagedIdentity,
         [switch]       $UseExistingConnection
     )
+
+    if ($IncludeItems -and -not $Deep) {
+        throw "-IncludeItems only means something with -Deep. Add -Deep, or drop -IncludeItems."
+    }
+    if ($Deep -and $UseExistingConnection) {
+        # Each subweb is connected to in turn (PnP v2 dropped -Web), which an existing
+        # connection cannot do - every subsite would be silently skipped.
+        throw "-Deep cannot be combined with -UseExistingConnection: subsites are connected to individually, so credentials (e.g. -ClientId -Interactive) are required."
+    }
 
     $connectSplat = @{
         ClientId = $ClientId; Tenant = $Tenant
@@ -95,7 +122,13 @@ function Get-SiteAccess {
                        -PercentComplete (($n / [Math]::Max($total,1)) * 100)
         try {
             Connect-IfNeeded -Url $site @connectSplat
-            Get-SiteAccessForWeb -WebUrl $site -MembershipCache $membershipCache -ExpandMembers:$ExpandMembers |
+            $rows = if ($Deep) {
+                Get-SiteAccessDeep -SiteUrl $site -ConnectSplat $connectSplat -IncludeItems:$IncludeItems `
+                    -MaxItemsPerList $MaxItemsPerList -MembershipCache $membershipCache -ExpandMembers:$ExpandMembers
+            } else {
+                Get-SiteAccessForWeb -WebUrl $site -MembershipCache $membershipCache -ExpandMembers:$ExpandMembers
+            }
+            $rows |
                 Where-Object { -not $OversharedOnly -or $_.RouteType -eq 'Overshared' } |
                 ForEach-Object { $emitted++; $_ }
         }
