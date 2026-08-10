@@ -617,6 +617,7 @@ $guiScript = {
               <TextBlock x:Name="TenantChipText" Text="Not connected" FontSize="12" Foreground="{DynamicResource Subtle}" VerticalAlignment="Center"/>
             </StackPanel>
           </Border>
+          <Button x:Name="HelpButton" Style="{StaticResource IconButton}" Content="&#xE897;" Margin="8,0,0,0" ToolTip="How to use this tool"/>
           <Button x:Name="SettingsButton" Style="{StaticResource IconButton}" Content="&#xE713;" Margin="8,0,0,0" ToolTip="Connection settings"/>
         </StackPanel>
       </Grid>
@@ -1191,7 +1192,7 @@ $guiScript = {
     $lensUser    = & $get 'LensUser';     $lensSite  = & $get 'LensSite';   $scanSubtitle = & $get 'ScanSubtitle'
     $userBlock   = & $get 'UserBlock';    $siteRowLabel = & $get 'SiteRowLabel'; $scopeTenantItem = & $get 'ScopeTenantItem'
     $tenantChip  = & $get 'TenantChip';   $chipText  = & $get 'TenantChipText'; $chipIcon = & $get 'TenantChipIcon'
-    $settingsBtn = & $get 'SettingsButton'
+    $settingsBtn = & $get 'SettingsButton'; $helpButton = & $get 'HelpButton'
     $tileRoutes  = & $get 'TileRoutes';   $tileUnexp = & $get 'TileUnexpected'; $tileUnexpCard = & $get 'TileUnexpectedCard'
     $tileRoutesLabel = & $get 'TileRoutesLabel'; $tileUnexpLabel = & $get 'TileUnexpLabel'; $tileSitesLabel = & $get 'TileSitesLabel'; $tileAccessLabel = & $get 'TileAccessLabel'
     $tileSites   = & $get 'TileSites';    $tileAccess = & $get 'TileAccess'
@@ -2077,6 +2078,60 @@ $guiScript = {
         $u = 'https://tools.fivenumber.com/feedback/?tool=' + [uri]::EscapeDataString('User Access Explorer') + '&ver=' + [uri]::EscapeDataString("$($script:appVersion)")
         try { Start-Process $u } catch { Write-Verbose "feedback open failed: $($_.Exception.Message)" }
     })
+
+    # --- Help popup: prerequisites + how to run ---
+    $helpPopup = New-Object System.Windows.Controls.Primitives.Popup
+    $helpPopup.PlacementTarget = $helpButton
+    $helpPopup.Placement = 'Bottom'; $helpPopup.StaysOpen = $false; $helpPopup.AllowsTransparency = $true
+    $helpXaml = @'
+<Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource Surface}" CornerRadius="8" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Width="400" Margin="8">
+  <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2"/></Border.Effect>
+  <StackPanel>
+    <Border Padding="18,14,18,12" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
+      <TextBlock Text="How to use User Access Explorer" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource Ink}"/>
+    </Border>
+    <ScrollViewer MaxHeight="470" VerticalScrollBarVisibility="Auto" Padding="18,14,18,16">
+      <StackPanel>
+        <TextBlock Text="WHAT IT DOES" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Subtle}" Margin="0,0,0,4"/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Text="See what a user can reach across SharePoint Online and how they got there (By user), or fix a site and see who can reach it (By site). Oversharing - access no one explicitly granted - is surfaced first. A Copilot-readiness and governance tool."/>
+
+        <TextBlock Text="PREREQUISITES" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Subtle}" Margin="0,14,0,4"/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,4" Text="- PnP.PowerShell installed (Install-Module PnP.PowerShell)."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,4" Text="- A Microsoft 365 account that can read the content you scan: SharePoint Administrator for a whole-tenant scan, or read access to the specific site."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,4" Text="- Your own Entra app registration (Client ID). PnP requires it for interactive sign-in since September 2024. Set it once in Connection settings (the gear)."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Text="- For a whole-tenant scan, your SharePoint admin URL (https://&lt;tenant&gt;-admin.sharepoint.com)."/>
+
+        <TextBlock Text="HOW TO RUN IT" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Subtle}" Margin="0,14,0,4"/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,5" Text="1.  Open Connection settings (the gear, top-right). Enter your Client ID and tenant admin URL, then sign in."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,5" Text="2.  Pick a lens: By user (what a user can reach) or By site (who can reach a site)."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,5" Text="3.  By user: type a name or email and pick the user (optionally add a second to compare). By site: enter the site."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,5" Text="4.  Choose a Scope: Whole tenant, One site, or One site (deep) - deep walks subsites, lists and items."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,5" Text="5.  Click Scan. Progress shows at the bottom; Stop cancels."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Text="6.  Read the results. Each row is a route that grants access. Overshared (red) is access no one explicitly gave. Use Overshared only to filter, and Export to save."/>
+
+        <TextBlock Text="MORE FEATURES" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Subtle}" Margin="0,14,0,4"/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,4" Text="- Compare two users - diffs access into Shared by both, Only-A and Only-B."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Margin="0,0,0,4" Text="- Scan history and Reports - reopen past scans and saved reports."/>
+        <TextBlock TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource Ink}" Text="- Deep scan finds sharing links that grant no per-user permission (invisible to a normal permission check)."/>
+
+        <TextBlock Text="LEARN MORE" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Subtle}" Margin="0,14,0,4"/>
+        <TextBlock FontSize="12.5" Margin="0,0,0,3"><Hyperlink x:Name="HelpGuide" Foreground="{DynamicResource Accent}" TextDecorations="None">Guide &amp; how-to (fivenumber.com)</Hyperlink></TextBlock>
+        <TextBlock FontSize="12.5"><Hyperlink x:Name="HelpRepo" Foreground="{DynamicResource Accent}" TextDecorations="None">View on GitHub</Hyperlink></TextBlock>
+      </StackPanel>
+    </ScrollViewer>
+  </StackPanel>
+</Border>
+'@
+    $helpPanel = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader ([xml]$helpXaml)))
+    $helpPopup.Child = $helpPanel
+    $helpPanel.Resources.MergedDictionaries.Add($window.Resources)
+    $helpGuide = $helpPanel.FindName('HelpGuide'); $helpRepo = $helpPanel.FindName('HelpRepo')
+    $helpButton.Add_Click({ $helpPopup.IsOpen = -not $helpPopup.IsOpen })
+    $helpGuide.Add_Click({ try { Start-Process $script:guideUrl } catch { Write-Verbose "$_" } })
+    $helpRepo.Add_Click({ try { Start-Process "https://github.com/$($script:repo)" } catch { Write-Verbose "$_" } })
+
     $aboutCheck.Add_Click({ & $runUpdateCheck $true })
     $aboutDownload.Add_Click({ if ($script:updateUrl) { try { Start-Process $script:updateUrl } catch { Write-Verbose "$_" } } })
     $aboutRepo.Add_Click({ try { Start-Process "https://github.com/$($script:repo)" } catch { Write-Verbose "$_" } })
