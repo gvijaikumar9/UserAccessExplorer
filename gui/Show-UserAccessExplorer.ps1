@@ -2560,9 +2560,16 @@ $guiScript = {
 
             if ($script:handle.IsCompleted) {
                 $script:timer.Stop()
-                $failMsg = $null
+                $failMsg = $null; $incompleteMsg = $null
                 try { $null = $script:bgPs.EndInvoke($script:handle) } catch { if (-not $script:cancelled) { $failMsg = $_.Exception.Message } }
-                foreach ($errRec in $script:bgPs.Streams.Error) { if (-not $script:cancelled) { $failMsg = "$errRec" } }
+                foreach ($errRec in $script:bgPs.Streams.Error) {
+                    if ($script:cancelled) { continue }
+                    if ("$($errRec.FullyQualifiedErrorId)" -like '*IncompleteScan*') { $incompleteMsg = "$errRec" } else { $failMsg = "$errRec" }
+                }
+                # IncompleteScan is a non-terminating "some sites could not be read" signal by design,
+                # but the module's ErrorActionPreference='Stop' escalates it into EndInvoke's catch.
+                # Reclassify it so the partial results are shown, not treated as a hard failure.
+                if ($failMsg -and "$failMsg" -match 'Scan is INCOMPLETE') { $incompleteMsg = $failMsg; $failMsg = $null }
                 $skipped = @($script:bgPs.Streams.Warning | Where-Object { "$_" -match '^Skipped ' }).Count
                 $script:bgPs.Dispose(); $script:bgRs.Dispose()
 
@@ -2606,16 +2613,22 @@ $guiScript = {
                     $emptyState.Text = "Scan failed: $failMsg"; $emptyState.Visibility = 'Visible'; $status.Text = "Failed: $failMsg"
                 }
                 elseif ($script:rows.Count -eq 0) {
-                    $emptyState.Text = if ($script:lens -eq 'site') { 'No access found on this site.' } else { 'No access found - this user cannot reach the scanned scope.' }
+                    $emptyState.Text = if ($incompleteMsg) {
+                        if ($script:lens -eq 'site') { 'No access found on the parts of this site that responded. Some could not be read and were skipped - re-run to try again.' }
+                        else { 'No access found on the sites that responded. Some sites could not be read and were skipped - re-run to try them again.' }
+                    } elseif ($script:lens -eq 'site') { 'No access found on this site.' } else { 'No access found - this user cannot reach the scanned scope.' }
                     $emptyState.Visibility = 'Visible'
-                    $status.Text = 'Done: no access found.'
+                    $status.Text = if ($incompleteMsg) { 'Done: no access on the sites that responded (some skipped).' } else { 'Done: no access found.' }
                 }
                 elseif ($emptyCmpUser) {
                     $scopeNote.Text = "$emptyCmpUser returned no access on this scope. That can be genuine - or a transient throttle emptying the second scan of a back-to-back compare. If it looks wrong, run Scan again to confirm."
                     $scopeNote.Foreground = [System.Windows.Media.Brush]$window.Resources['TileDanger']
                     $status.Text = "Done: $($script:rows.Count) route(s), $u overshared$skipNote - $emptyCmpUser had none (re-run if unexpected)."
                 }
-                else { $status.Text = "Done: $($script:rows.Count) $noun(s), $u overshared$skipNote." }
+                else {
+                    if ($incompleteMsg) { $scopeNote.Text = $incompleteMsg; $scopeNote.Foreground = [System.Windows.Media.Brush]$window.Resources['TileDanger'] }
+                    $status.Text = "Done: $($script:rows.Count) $noun(s), $u overshared$skipNote." + $(if ($incompleteMsg) { ' Some sites were skipped - re-run to retry them.' } else { '' })
+                }
             }
         })
         $script:timer.Start()
