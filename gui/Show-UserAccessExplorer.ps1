@@ -542,6 +542,7 @@ $guiScript = {
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
           <Border Height="1" Background="{DynamicResource Line}" Margin="0,0,0,10"/>
+          <Button x:Name="FeedbackBtn" Style="{StaticResource NavItemBtn}" Content="Submit feedback" Tag="&#xE939;"/>
           <Button x:Name="ThemeToggle" Style="{StaticResource NavItemBtn}" Content="Dark mode" Tag="&#xE708;"/>
           <Button x:Name="VersionButton" Cursor="Hand" Margin="0,2,0,0" HorizontalAlignment="Left" ToolTip="About &#38; check for updates">
             <Button.Template>
@@ -1214,7 +1215,7 @@ $guiScript = {
         $viewToggle.Visibility   = if ($IsDeep -and -not $IsCompare -and -not $isSite) { 'Visible' } else { 'Collapsed' }
     }
     $scanView = & $get 'ScanView'; $savedView = & $get 'SavedView'; $savedList = & $get 'SavedList'; $savedEmpty = & $get 'SavedEmpty'
-    $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $themeToggle = & $get 'ThemeToggle'
+    $navScan = & $get 'NavScan'; $navSaved = & $get 'NavSaved'; $themeToggle = & $get 'ThemeToggle'; $feedbackBtn = & $get 'FeedbackBtn'
     $versionButton = & $get 'VersionButton'; $versionText = & $get 'VersionText'; $updateBadge = & $get 'UpdateBadge'
     $railBorder = & $get 'RailBorder'; $railDock = & $get 'RailDock'; $railToggle = & $get 'RailToggle'
     $window.Resources['NavTextVis'] = [System.Windows.Visibility]::Visible   # rail labels shown by default
@@ -2060,6 +2061,76 @@ $guiScript = {
     }
 
     $versionButton.Add_Click({ $aboutPopup.IsOpen = -not $aboutPopup.IsOpen })
+
+    # --- Submit feedback popup (Web3Forms) ---
+    $fbPopup = New-Object System.Windows.Controls.Primitives.Popup
+    $fbPopup.PlacementTarget = $feedbackBtn
+    $fbPopup.Placement = 'Top'; $fbPopup.StaysOpen = $false; $fbPopup.AllowsTransparency = $true
+    $fbXaml = @'
+<Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource Surface}" CornerRadius="8" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" Width="330" Margin="8">
+  <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2"/></Border.Effect>
+  <StackPanel Margin="18">
+    <StackPanel x:Name="FbForm">
+      <TextBlock Text="Send feedback" FontWeight="SemiBold" FontSize="14.5" Foreground="{DynamicResource Ink}"/>
+      <TextBlock Text="Found this useful, or hit a snag? Tell me what worked and what would make it better." FontSize="11.5" Foreground="{DynamicResource Subtle}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+      <TextBlock Text="Name *" FontSize="11.5" Foreground="{DynamicResource Ink}" Margin="0,14,0,3"/>
+      <TextBox x:Name="FbName"/>
+      <TextBlock Text="Email *" FontSize="11.5" Foreground="{DynamicResource Ink}" Margin="0,10,0,3"/>
+      <TextBox x:Name="FbEmail"/>
+      <TextBlock Text="Role / Company (optional)" FontSize="11.5" Foreground="{DynamicResource Subtle}" Margin="0,10,0,3"/>
+      <TextBox x:Name="FbRole"/>
+      <TextBlock Text="Your feedback *" FontSize="11.5" Foreground="{DynamicResource Ink}" Margin="0,10,0,3"/>
+      <Border CornerRadius="6" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1">
+        <TextBox x:Name="FbMsg" Background="Transparent" Foreground="{DynamicResource Ink}" BorderThickness="0" Height="74" Padding="10,6,10,6" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+      </Border>
+      <CheckBox x:Name="FbConsent" Content="You may share my feedback publicly as a testimonial" FontSize="11.5" Foreground="{DynamicResource Subtle}" Margin="0,12,0,0"/>
+      <Button x:Name="FbSend" Content="Send feedback" Height="34" Margin="0,14,0,0" Background="{DynamicResource Accent}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+      <TextBlock x:Name="FbStatus" FontSize="11.5" Foreground="#D13438" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed"/>
+    </StackPanel>
+    <StackPanel x:Name="FbThanks" Visibility="Collapsed">
+      <TextBlock Text="Thanks - your feedback was sent." FontWeight="SemiBold" FontSize="13.5" Foreground="{DynamicResource Ink}"/>
+      <TextBlock Text="I read every note. If you left your email, I may follow up." FontSize="11.5" Foreground="{DynamicResource Subtle}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+    </StackPanel>
+  </StackPanel>
+</Border>
+'@
+    $fbPanel = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader ([xml]$fbXaml)))
+    $fbPopup.Child = $fbPanel
+    $fbPanel.Resources.MergedDictionaries.Add($window.Resources)
+    $fbForm = $fbPanel.FindName('FbForm'); $fbThanks = $fbPanel.FindName('FbThanks')
+    $fbName = $fbPanel.FindName('FbName'); $fbEmail = $fbPanel.FindName('FbEmail'); $fbRole = $fbPanel.FindName('FbRole')
+    $fbMsg = $fbPanel.FindName('FbMsg'); $fbConsent = $fbPanel.FindName('FbConsent')
+    $fbSend = $fbPanel.FindName('FbSend'); $fbStatus = $fbPanel.FindName('FbStatus')
+    $fbName.Style = $window.Resources['Field']; $fbEmail.Style = $window.Resources['Field']; $fbRole.Style = $window.Resources['Field']
+    $feedbackBtn.Add_Click({
+        $fbForm.Visibility = 'Visible'; $fbThanks.Visibility = 'Collapsed'; $fbStatus.Visibility = 'Collapsed'
+        $fbSend.IsEnabled = $true; $fbSend.Content = 'Send feedback'
+        $fbPopup.IsOpen = -not $fbPopup.IsOpen
+    })
+    $fbSend.Add_Click({
+        $nm = "$($fbName.Text)".Trim(); $em = "$($fbEmail.Text)".Trim(); $rl = "$($fbRole.Text)".Trim(); $mg = "$($fbMsg.Text)".Trim()
+        if (-not $nm -or -not $em -or -not $mg) { $fbStatus.Text = 'Please add your name, email and a short message.'; $fbStatus.Visibility = 'Visible'; return }
+        if ($em -notmatch '^[^\s@]+@[^\s@]+\.[^\s@]+$') { $fbStatus.Text = 'Please enter a valid email address.'; $fbStatus.Visibility = 'Visible'; return }
+        $fbStatus.Visibility = 'Collapsed'; $fbSend.IsEnabled = $false; $fbSend.Content = 'Sending...'
+        $payload = @{
+            access_key = 'ba20bdf3-788e-400e-a5b8-33d2575d127e'
+            subject    = 'New User Access Explorer feedback'
+            from_name  = 'User Access Explorer'
+            tool       = "User Access Explorer $($script:appVersion)"
+            name = $nm; email = $em; role = $rl; message = $mg
+            consent_to_share = $(if ($fbConsent.IsChecked) { 'Yes - may be shared publicly as a testimonial' } else { '' })
+        } | ConvertTo-Json
+        try {
+            $resp = Invoke-RestMethod -Uri 'https://api.web3forms.com/submit' -Method Post -ContentType 'application/json' -Body $payload -TimeoutSec 15
+            if ($resp.success) { $fbForm.Visibility = 'Collapsed'; $fbThanks.Visibility = 'Visible' }
+            else { $fbSend.IsEnabled = $true; $fbSend.Content = 'Send feedback'; $fbStatus.Text = 'Sorry, something went wrong. Please try again.'; $fbStatus.Visibility = 'Visible' }
+        } catch {
+            $fbSend.IsEnabled = $true; $fbSend.Content = 'Send feedback'
+            $fbStatus.Text = 'Network error - please check your connection and try again.'; $fbStatus.Visibility = 'Visible'
+        }
+    })
     $aboutCheck.Add_Click({ & $runUpdateCheck $true })
     $aboutDownload.Add_Click({ if ($script:updateUrl) { try { Start-Process $script:updateUrl } catch { Write-Verbose "$_" } } })
     $aboutRepo.Add_Click({ try { Start-Process "https://github.com/$($script:repo)" } catch { Write-Verbose "$_" } })
