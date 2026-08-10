@@ -23,6 +23,13 @@ $guiScript = {
 
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
     Import-Module $ModulePath -Force
+    # Importing the module turns on Set-StrictMode -Version Latest (psm1). The
+    # GUI/presentation layer legitimately reads dynamic PSObject + WPF properties
+    # that may be absent (legacy saved scans, optional per-lens fields) and was
+    # written to treat those as $null, not to throw. Disable strict mode for the
+    # GUI scope so it behaves as designed; the engine functions keep their own
+    # StrictMode because they run in the module's session state.
+    Set-StrictMode -Off
     $script:ModulePath = $ModulePath
 
     # Real typed node for the tree. WPF's HierarchicalDataTemplate binds a
