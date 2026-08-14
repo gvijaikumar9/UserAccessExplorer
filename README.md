@@ -11,6 +11,11 @@ Overshared routes are surfaced **first**. That grouping is the whole point of th
 
 This is a **Copilot-readiness / oversharing review** tool for admins.
 
+![User Access Explorer running a by-user deep scan: Overshared routes grouped at the top, each row showing the route the access came through and the effective permission](docs/screenshots/by-user.png)
+
+A step-by-step walkthrough is on the blog:
+[User Access Explorer: see what a user can really reach in SharePoint](https://www.fivenumber.com/user-access-explorer/).
+
 ---
 
 ## Permissions the app needs
@@ -156,6 +161,10 @@ Get-UserAccess -User jane@contoso.com -TenantWide -TenantAdminUrl $admin -Client
 ... | Export-UserAccessReport -Path .\jane-access.csv
 ```
 
+The HTML report is self-contained and leads with the Overshared section:
+
+![The exported Access review HTML report, with an Overshared access section first and Granted access below, each row linking to the object's Manage-permissions page](docs/screenshots/report.png)
+
 ### What each row tells you
 
 | Column | Meaning |
@@ -185,9 +194,17 @@ pwsh -File .\gui\Show-UserAccessExplorer.ps1
 
 Results are a **sortable, groupable grid** — one row per route, with the **Overshared** ones grouped to the top and each grant path shown with its route (`Everyone claim → read`, `Sharing link → view`, and so on). Click a column header to sort; use the header chevron to group or filter by any column. Four tiles summarize the whole scan at a glance — Routes found, **Overshared**, Sites reached, Highest access. Filter with the search box, flip **Overshared only** to see just the risky routes, switch to the **Tree view** to see the Site → Library → Folder → Item hierarchy (single-user deep scans), and **Export** to HTML or CSV. Every object row (and tree node) has an **open-permissions button** that jumps straight to that object's **advanced-permissions page** in SharePoint (site / list / item). For an item that carries a sharing link, that page also shows the link and a **"manage links"** action, so it's the one-click route to revoke.
 
+The **Tree view** shows the same deep scan as a Site → Library → Folder → Item hierarchy, so you can see exactly where in the site the risky access sits:
+
+![The Tree view of a deep scan, showing the site hierarchy with each library, folder and file and how many carry their own unique permissions](docs/screenshots/tree-view.png)
+
 **Compare two users.** Switch the **Single user** control to add a second user, and the scan runs both, then diffs them: rows are grouped **Shared by both**, **Only** the first user, and **Only** the second, with a **User** column showing whose access each route is, and the tiles switch to Shared / Only-A / Only-B counts. Good for "give the new starter the same access as her manager" — you see exactly where the two differ before copying anything. Compare runs are saved to Scan history like any other. (The Tree view is hidden in compare mode; a hierarchy can't express a two-user diff.)
 
+![Comparing two users: rows grouped Shared by both, Only the first user, and Only the second, with the tiles switched to Shared / Only-A / Only-B counts](docs/screenshots/compare.png)
+
 **By user or by site.** The header has a **By user / By site** toggle. *By site* flips the subject: pick a **site** instead of a user, and every row becomes a **principal that can reach it** — with **Who** (the principal), **Type** (SharePoint group / Entra group / Everyone / Sharing link / User), **Members** (the group's member count), **Permission**, and a **Manage** button, Overshared-first. Run it *deep* and it walks down to the subsites, libraries and files with their own permissions, so a document shared with **Everyone** three folders down gets its own row. Tiles switch to **Principals / Overshared / Groups / Highest access**. By-site scans save to Scan history too (each history card is badged **By site** or **By user**).
+
+![By-site scan: every principal that can reach the site — Everyone claims and sharing links first, then SharePoint and Entra groups with member counts — each classified Granted or Overshared](docs/screenshots/by-site.png)
 
 The scan runs on a background runspace so the window stays responsive on tenant-wide sweeps.
 
